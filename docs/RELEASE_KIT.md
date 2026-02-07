@@ -1,20 +1,39 @@
 # Release Kit
 
-This file provides copy-paste material for publishing `diasync-memory`.
+This document contains practical release assets for publishing `diasync-memory`.
 
-## 1. GitHub Repository Name Suggestions
+## 1. Pre-Release Checklist
+
+Before tagging a release:
+
+```bash
+python -m py_compile .opencode/skills/diasync-memory/scripts/memoryctl.py
+python .opencode/skills/diasync-memory/scripts/memoryctl.py validate --strict
+python .opencode/skills/diasync-memory/scripts/memoryctl.py diagnose --dry-run
+python .opencode/skills/diasync-memory/scripts/memoryctl.py optimize --dry-run
+```
+
+Also verify:
+
+- `docs/` reflects current behavior.
+- `.opencode/skills/diasync-memory/references/COMMANDS.md` is current.
+- examples in `.opencode/skills/diasync-memory/examples/` still run.
+
+## 2. Suggested Repository Names
 
 - `diasync-memory-skill`
 - `agent-diasync-memory`
 - `diasync-memory-for-opencode`
 
-## 2. GitHub About (Short)
+## 3. GitHub About Copy
 
-`Production-ready DiaSync memory skill for AI coding agents: cross-session continuity, multi-instance concurrency, conflict-safe writes, and self-diagnosis on a filesystem-native .memory runtime.`
+Short:
 
-## 3. GitHub About (Long)
+`Production-ready filesystem-native memory skill for AI coding agents with cross-session continuity, explicit multi-instance coordination, conflict-safe writes, and continuous health governance.`
 
-`diasync-memory is a single integrated skill package for OpenCode-compatible agents. It provides deterministic append-only memory writes, autonomous filesystem-native recall, explicit multi-instance coordination (streams/bus/reduce/lease/conflict), and built-in governance (diagnose/optimize). Runtime state is fully agent-managed in hidden .memory.`
+Long:
+
+`diasync-memory is a single integrated skill package for OpenCode-compatible agents. It combines deterministic append-only memory writes, transparent filesystem-native recall, explicit concurrency controls (streams, bus, reducer, lease, conflict), and a built-in governance loop (diagnose and optimize). Runtime state is agent-managed in hidden .memory.`
 
 ## 4. Suggested Topics
 
@@ -28,37 +47,58 @@ This file provides copy-paste material for publishing `diasync-memory`.
 - `concurrency`
 - `diasync-memory`
 
-## 5. Initial Release Notes Template
+## 5. Release Notes Template
 
 Title:
 
-`v3.1.0 - Single-package diasync-memory with hidden .memory lifecycle`
+`v3.1.0 - Stable filesystem-native memory runtime for multi-instance agents`
 
 Body:
 
 ```markdown
 ## Highlights
-- Consolidated into one installable skill package: `diasync-memory`
-- Moved deterministic runtime tool inside skill package: `scripts/memoryctl.py`
-- Switched runtime root to hidden `.memory` with auto-init lifecycle
-- Preserved autonomous recall (filesystem-native `Read`/`Grep`/`Glob` protocol)
-- Added production governance loop: `diagnose` + `optimize`
+- Ships as one installable skill package: `diasync-memory`
+- Uses deterministic append-only runtime operations in `scripts/memoryctl.py`
+- Maintains hidden `.memory` lifecycle with automatic initialization
+- Preserves filesystem-native recall via `Read`/`Grep`/`Glob`
+- Includes operational governance loop (`diagnose` + `optimize`)
 
-## Commands
-- `sync`, `attach`, `capture`, `distill`, `publish`, `reduce`
-- `lease`, `reconcile`, `checkpoint`, `handoff`, `agenda`
-- `hygiene`, `validate`, `diagnose`, `optimize`, `stats`
+## Command Surface
+- Lifecycle: `sync`, `attach`, `checkpoint`, `handoff`
+- Knowledge flow: `capture`, `distill`, `publish`, `reduce`, `reconcile`
+- Coordination and governance: `lease`, `agenda`, `hygiene`, `validate`, `diagnose`, `optimize`, `stats`
 
 ## Runtime Model
-- Private instance streams
+- Private per-instance streams
 - Shared publish bus
-- Deterministic view reduction
-- Conflict ledger + lease control
-- Hidden `.memory` fully agent-managed lifecycle
+- Deterministic reduction into views
+- Conflict ledger + lease-based contention control
+- Governance ledgers for findings, scorecards, plans, and executions
 ```
 
 ## 6. README Intro Snippet
 
 ```markdown
-diasync-memory is a production-ready skill package that gives AI coding agents long-horizon memory continuity and safe concurrent multi-instance coordination. It keeps write operations deterministic and auditable while preserving free, filesystem-native recall.
+DiaSync Memory is a production-ready skill package that gives AI coding agents durable, auditable memory across sessions and instances. It keeps writes deterministic and append-only while preserving transparent filesystem-native recall.
 ```
+
+## 7. Minimal Changelog Sections
+
+Use these sections in each release:
+
+- Added
+- Changed
+- Fixed
+- Operational impact
+- Upgrade notes
+
+## 8. Artifact Boundary
+
+If publishing only the skill package, include:
+
+- `.opencode/skills/diasync-memory/SKILL.md`
+- `.opencode/skills/diasync-memory/scripts/memoryctl.py`
+- `.opencode/skills/diasync-memory/references/*.md`
+- `.opencode/skills/diasync-memory/examples/*.md`
+
+Exclude runtime/generated directories (`.memory/`, `venv/`, `node_modules/`).

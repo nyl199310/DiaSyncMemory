@@ -1,80 +1,134 @@
 # Architecture (V3.1)
 
-## 1. End-State
+## 1. System Intent
 
-An AI memory mechanism that:
+DiaSync Memory provides durable, auditable memory for AI agents operating across:
 
-- feels continuous across sessions
-- handles asynchronous multi-instance concurrency
-- keeps write integrity and retrieval flexibility
-- continuously diagnoses and optimizes itself
+- multiple sessions,
+- multiple concurrent instances,
+- and long-running project timelines.
 
-## 2. First-Principles Decisions
+The architecture prioritizes correctness and recoverability over convenience mutation.
 
-1. Concurrency is normal, not exceptional.
-2. Write correctness is stronger than read convenience.
-3. Read path should preserve agent autonomy.
-4. Memory must be auditable and revisable, not mutable in place.
-5. Skill activation should remain token-efficient via progressive disclosure.
+## 2. Design Principles
+
+1. Concurrency is a baseline assumption, not an edge case.
+2. Write integrity is stricter than read convenience.
+3. Recall remains filesystem-native to preserve agent autonomy.
+4. History is append-only; corrections are modeled explicitly.
+5. Governance is continuous, not an afterthought.
 
 ## 3. Packaging Model
 
-Single integrated skill package:
+DiaSync is shipped as a single integrated skill package:
 
 - `.opencode/skills/diasync-memory/`
 
 Rationale:
 
-- one distributable unit
-- one lifecycle contract
-- one script/runtime coupling point
+- One artifact to install, version, and publish.
+- One runtime contract for memory lifecycle.
+- One authoritative command entrypoint (`memoryctl.py`).
 
-## 4. Runtime Memory Substrate
+## 4. Runtime Substrate
 
-Hidden runtime root:
+Runtime state lives in hidden `.memory/` and is auto-initialized.
 
-- `.memory/`
+```text
+.memory/
+  _meta/         # schemas, policy, runtime metadata
+  streams/       # private per-instance event logs
+  bus/           # shared publish channel
+  views/         # reduced facts/decisions/commitments + attach capsules
+  coordination/  # instances, cursors, reducers, conflicts, leases
+  projects/      # state.md, resume.md, agenda.jsonl
+  governance/    # findings, scorecards, plans, executions
+  index/         # catalog and id maps
+  archive/       # compressed historical shards
+  evidence/      # optional external evidence references
+```
 
-Main zones:
+## 5. Dataflow Model
 
-- `streams/` (per-instance private event logs)
-- `bus/` (shared publish channel)
-- `views/` (facts/decisions/commitments/attach)
-- `coordination/` (instances, cursors, leases, conflicts, reducers)
-- `projects/` (state/resume/agenda)
-- `governance/` (findings, health, optimization plans/executions)
-- `index/`, `archive/`, `evidence/`, `_meta/`
+### 5.1 Private capture and distillation
 
-## 5. Execution Model
+1. Agent writes high-value events to `streams/` via `capture`.
+2. `distill` transforms captured events into view objects.
+3. Distillation records are append-only and hash-verified.
 
-Write path (deterministic):
+### 5.2 Shared publish and reduction
 
-- `.opencode/skills/diasync-memory/scripts/memoryctl.py`
+1. Agent publishes shareable knowledge to `bus/` via `publish`.
+2. `reduce` consumes only `memory.published` events.
+3. Reduced objects are written to monthly shards in `views/`.
+4. Reducer operations are audited in `coordination/reducers.jsonl`.
 
-Read path (autonomous):
+### 5.3 Continuity artifacts
 
-- `Read`, `Grep`, `Glob` through the diasync-memory recall protocol
+- `attach` composes startup grounding capsules.
+- `checkpoint` writes current-session state.
+- `handoff` writes end-session resume context.
 
-No scripted ranking command for recall.
+## 6. Concurrency And Consistency
 
-## 6. Concurrency Contract
+DiaSync uses explicit contracts rather than hidden locking:
 
-- Instances write private streams only.
-- Shared knowledge goes through bus.
-- Reducer converges bus to views.
-- Key collisions become explicit conflicts.
-- Leases protect high-contention decision keys.
+- **Private write isolation:** instances write to their own stream shards.
+- **Shared channel convergence:** bus events are reduced deterministically.
+- **Conflict explicitness:** decision-key collisions emit conflict records.
+- **Lease control:** `(scope, key)` ownership prevents contested overwrites.
 
-## 7. Continuity Contract
+This model keeps races visible and recoverable.
 
-- `attach`: new-session grounding
-- `checkpoint`: long-session anti-drift
-- `handoff`: end-session transfer capsule
+## 7. Governance Loop
 
-## 8. Governance Contract
+Governance is built into runtime operations:
 
-- `diagnose`: score + findings
-- `optimize`: plans + safe execution
-- `hygiene`: reindex/rotate/archive
+- `diagnose` computes health metrics and opens findings.
+- `optimize` generates plans and can execute safe actions.
+- `hygiene` reindexes/rotates/archives data for long-term stability.
 
-This creates a self-improving memory loop.
+The loop is intentionally operational: detect, plan, execute, verify.
+
+## 8. Complexity Coverage
+
+DiaSync is explicitly engineered for two complexity classes that break naive agent memory
+systems:
+
+- **Diachronic complexity (over time):** context drift across long sessions, interruptions,
+  and handoffs.
+- **Synchronic complexity (same-time):** contention and divergence across concurrent instances.
+
+Primary controls:
+
+- Diachronic controls: attach capsules, checkpoints, handoff capsules, append-only lineage,
+  and `supersedes` correction.
+- Synchronic controls: private streams, shared bus reduction, lease ownership, and explicit
+  conflict ledgers.
+
+## 9. Recall Model
+
+DiaSync intentionally does not implement a ranked recall command.
+
+Recall is protocol-driven using filesystem tools (`Read`, `Grep`, `Glob`) over:
+
+- attach capsules,
+- project state/resume files,
+- reduced view shards,
+- optional evidence paths.
+
+This keeps retrieval transparent and controllable for agents.
+
+## 10. Non-Goals
+
+The current architecture does not aim to provide:
+
+- vector database retrieval,
+- hidden in-place object mutation,
+- opaque conflict auto-resolution,
+- centralized orchestration service dependencies.
+
+## 11. Architecture In One Sentence
+
+DiaSync Memory is an append-only, filesystem-native, multi-instance memory runtime with
+explicit contention handling and continuous self-governance.

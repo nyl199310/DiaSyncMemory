@@ -11,7 +11,7 @@ metadata:
 
 ## Mission
 
-Run the full `.memory` lifecycle autonomously so sessions feel continuous and concurrent instances converge safely.
+Run the full `.memory` lifecycle proactively and autonomously so sessions feel continuous and concurrent instances converge safely, without step-by-step human intervention.
 
 `diasync-memory` uses a hyphenated name to comply with the Agent Skills naming specification.
 
@@ -21,6 +21,11 @@ Run the full `.memory` lifecycle autonomously so sessions feel continuous and co
 - Read path is filesystem-native (`Read`, `Grep`, `Glob`) for agent autonomy.
 - Concurrency is explicit (streams, bus, leases, conflicts).
 - Governance is continuous (diagnose and optimize loop).
+
+## Complexity Model
+
+- **Diachronic complexity (over time):** maintain continuity across sessions using attach, checkpoint, and handoff artifacts plus append-only correction chains.
+- **Synchronic complexity (same-time concurrency):** coordinate multiple active instances using scoped streams, bus reduction, leases, and explicit conflict records.
 
 ## Bootstrap
 

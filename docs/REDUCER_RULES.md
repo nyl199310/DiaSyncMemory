@@ -2,33 +2,73 @@
 
 ## 1. Purpose
 
-Reducer transforms `bus/` events into `views/` objects with deterministic rules.
+The reducer converges shared bus events into normalized view objects.
+
+It is the primary mechanism that turns cross-instance publication into durable, queryable
+project memory.
 
 ## 2. Input Eligibility
 
-- Only `memory.published` events are reduced.
-- Each event is reduced at most once (tracked by `reduced_event_ids.jsonl`).
+Reducer processes only events that satisfy both rules:
 
-## 3. Mapping Rules
+1. Source zone is `bus/`.
+2. Event type is `memory.published`.
 
-- `payload.object_type=fact` -> `views/facts`
-- `payload.object_type=decision` -> `views/decisions`
-- `payload.object_type=commitment` -> `views/commitments`
+Any other event type is ignored for reduction.
 
-## 4. Decision Key Collision Rule
+## 3. Idempotency / At-Most-Once Behavior
 
-If an active decision already exists with the same `decision_key` and conflicting summary:
+- Processed event IDs are tracked in `_meta/reduced_event_ids.jsonl`.
+- A previously reduced event is skipped.
+- This keeps reduction deterministic across retries.
 
-1. Do not auto-overwrite.
-2. Emit conflict record to `coordination/conflicts.jsonl`.
-3. Require explicit `reconcile` path.
+## 4. Mapping Rules
 
-## 5. Commitment Rule
+- `payload.object_type = fact` -> `views/facts/<scope>/<YYYY-MM>.jsonl`
+- `payload.object_type = decision` -> `views/decisions/<scope>/<YYYY-MM>.jsonl`
+- `payload.object_type = commitment` -> `views/commitments/<scope>/<YYYY-MM>.jsonl`
 
-When reducing commitments with project scope:
+If `object_type` is invalid, reducer infers a type from summary heuristics.
 
-- mirror as active agenda item in `projects/<id>/agenda.jsonl`.
+## 5. Conflict Rule For Decision Keys
 
-## 6. Audit Rule
+When reducing a decision with `decision_key`:
 
-Reducer appends operation evidence to `coordination/reducers.jsonl`.
+- If an active decision exists in the same scope with the same key and a different summary,
+  reducer must open a conflict record.
+- Reducer must not overwrite the existing active decision.
+- Resolution requires explicit `reconcile` action.
+
+Conflict records are appended to:
+
+- `coordination/conflicts.jsonl`
+
+## 6. Commitment Mirroring Rule
+
+When a reduced object is a `commitment` with a project value:
+
+- mirror the commitment into `projects/<project>/agenda.jsonl` as an active item.
+
+This keeps project queue state synchronized with memory commitments.
+
+## 7. Reducer Audit Trail
+
+Every successful reduction appends operation evidence to:
+
+- `coordination/reducers.jsonl`
+
+Audit rows include event ID, target object ID, scope, type, and timestamp.
+
+## 8. Optional Reindex Behavior
+
+If `reduce` is run with `--reindex`:
+
+- reducer triggers index rebuild (`index/catalog.jsonl`, `index/id_map.jsonl`, etc.).
+
+This is recommended after significant reduction batches.
+
+## 9. Operational Guarantees
+
+- No silent overwrite of contested decisions.
+- Visibility of unresolved contention via conflict ledger.
+- Deterministic append-only output suitable for replay and auditing.
