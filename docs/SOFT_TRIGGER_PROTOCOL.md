@@ -61,17 +61,34 @@ Recommended order:
 - Run `optimize` after `diagnose`.
 - Use `--dry-run` first when operating in sensitive contexts.
 
-## 5. Trigger Frequency Guidelines
+## 5. Complexity-Aware Triggering
+
+- If risk is continuity drift over time, prioritize attach/checkpoint/handoff.
+- If risk is same-time contention, prioritize lease/reconcile/reduce.
+- If both are present, stabilize contention first, then refresh continuity artifacts.
+
+This keeps trigger decisions aligned with diachronic vs synchronic complexity.
+
+## 6. Trigger Frequency Guidelines
 
 - Capture frequently, distill periodically.
 - Publish intentionally, reduce promptly.
 - Diagnose regularly, optimize conservatively.
 - Checkpoint on milestones, handoff on every session end.
 
-## 6. Guardrails
+## 7. Guardrails
 
 - Never rewrite historical ledger lines.
 - Use `supersedes` for corrections.
 - Keep summaries concise and explicit.
 - Keep uncertainty visible (`confidence`, assumptions, evidence).
 - Prefer conflict visibility over silent overwrite behavior.
+
+## 8. End-State Check
+
+Before finishing, verify the memory system can answer without re-discovery:
+
+- What is the current goal?
+- What are active decisions and commitments?
+- What is unresolved?
+- What is the next action?

@@ -30,6 +30,15 @@ Capabilities are activated through reference modules rather than separate skill 
 - **Checkpoint and handoff**: anti-drift continuity artifacts.
 - **Recall protocol**: filesystem-native retrieval workflow.
 - **Governance loop**: diagnose and optimize for memory health.
+- **Proactive cadence**: autonomous command timing without hard logic.
+- **Memory debt model**: soft prioritization for memory upkeep.
+- **Complexity radar**: diachronic and synchronic risk framing.
+
+Reference locations:
+
+- `.opencode/skills/diasync-memory/references/PROACTIVE_CADENCE.md`
+- `.opencode/skills/diasync-memory/references/MEMORY_DEBT.md`
+- `.opencode/skills/diasync-memory/references/COMPLEXITY_RADAR.md`
 
 ## 4. Why Single-Skill Packaging
 

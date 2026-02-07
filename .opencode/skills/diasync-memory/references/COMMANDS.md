@@ -17,3 +17,9 @@
 - `diagnose`: health scoring and findings
 - `optimize`: action planning and safe execution
 - `stats`: quick operational overview
+
+Policy references for autonomous operation:
+
+- `PROACTIVE_CADENCE.md`
+- `MEMORY_DEBT.md`
+- `COMPLEXITY_RADAR.md`

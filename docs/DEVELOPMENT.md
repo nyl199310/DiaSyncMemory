@@ -78,7 +78,10 @@ python .opencode/skills/diasync-memory/scripts/memoryctl.py handoff --project de
 python .opencode/skills/diasync-memory/scripts/memoryctl.py sync stop --instance-id ins-main --scope project:demo
 ```
 
-For a full scenario script, use `.opencode/skills/diasync-memory/examples/DEMO_COMMANDS.md`.
+For full scenario scripts, use:
+
+- `.opencode/skills/diasync-memory/examples/DEMO_COMMANDS.md`
+- `.opencode/skills/diasync-memory/examples/AUTONOMOUS_SESSION.md`
 
 ## 7. Code Change Expectations
 
@@ -97,6 +100,9 @@ If command flags, behavior, or data semantics change, also update:
 - `docs/MEMORYCTL_CLI_SPEC.md`
 - `docs/MEMORY_FORMAT_SPEC.md`
 - `.opencode/skills/diasync-memory/references/COMMANDS.md`
+- `.opencode/skills/diasync-memory/references/PROACTIVE_CADENCE.md`
+- `.opencode/skills/diasync-memory/references/MEMORY_DEBT.md`
+- `.opencode/skills/diasync-memory/references/COMPLEXITY_RADAR.md`
 - relevant examples in `.opencode/skills/diasync-memory/examples/`
 
 ## 9. Release-Ready Checklist

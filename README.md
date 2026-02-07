@@ -49,6 +49,18 @@ DiaSync explicitly manages both long-horizon and concurrent complexity:
 
 This is the core reason DiaSync remains stable in long-running, multi-agent projects.
 
+## Autonomous Policy Layer
+
+Beyond commands, DiaSync includes policy references for proactive behavior in progressive
+disclosure skill systems:
+
+- `.opencode/skills/diasync-memory/references/PROACTIVE_CADENCE.md`
+- `.opencode/skills/diasync-memory/references/MEMORY_DEBT.md`
+- `.opencode/skills/diasync-memory/references/COMPLEXITY_RADAR.md`
+
+These guides keep operation soft-policy-driven (not hard orchestration logic) while improving
+autonomous memory quality over time.
+
 ## Who It Is For
 
 DiaSync is a strong fit when you need:
@@ -177,6 +189,7 @@ python .opencode/skills/diasync-memory/scripts/memoryctl.py optimize --dry-run
 End-to-end demo:
 
 - `.opencode/skills/diasync-memory/examples/DEMO_COMMANDS.md`
+- `.opencode/skills/diasync-memory/examples/AUTONOMOUS_SESSION.md`
 
 ## Publishing
 

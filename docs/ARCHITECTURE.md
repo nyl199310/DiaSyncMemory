@@ -17,6 +17,7 @@ The architecture prioritizes correctness and recoverability over convenience mut
 3. Recall remains filesystem-native to preserve agent autonomy.
 4. History is append-only; corrections are modeled explicitly.
 5. Governance is continuous, not an afterthought.
+6. Agent behavior is guided by soft policy, not rigid hard orchestration logic.
 
 ## 3. Packaging Model
 
