@@ -5,7 +5,7 @@ Repository type: Python CLI + Markdown docs.
 Authoritative runtime: `.opencode/skills/diasync-memory/scripts/memoryctl.py`.
 
 ## Scope And Priority
-- Treat this file as the default playbook for coding agents in this repo.
+- Treat this file as the default playbook for agents operating in this repo.
 - If explicit task instructions conflict with this file, follow the task instructions.
 - Keep edits focused; avoid broad refactors unless requested.
 - Do not edit generated/runtime directories: `.memory/`, `venv/`, `.opencode/node_modules/`.

@@ -12,7 +12,7 @@ Install location:
 
 ## 2. Skill Mission
 
-`diasync-memory` provides an operational memory system for coding agents with:
+`diasync-memory` provides an operational memory system for AI agents and assistants with:
 
 - cross-session continuity,
 - multi-instance synchronization,

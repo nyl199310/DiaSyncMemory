@@ -29,7 +29,7 @@ Also verify:
 
 Short:
 
-`Production-ready filesystem-native memory skill for AI coding agents with cross-session continuity, explicit multi-instance coordination, conflict-safe writes, and continuous health governance.`
+`Production-ready filesystem-native memory skill for AI agents and assistants with cross-session continuity, explicit multi-instance coordination, conflict-safe writes, and continuous health governance.`
 
 Long:
 
@@ -79,7 +79,7 @@ Body:
 ## 6. README Intro Snippet
 
 ```markdown
-DiaSync Memory is a production-ready skill package that gives AI coding agents durable, auditable memory across sessions and instances. It keeps writes deterministic and append-only while preserving transparent filesystem-native recall.
+DiaSync Memory is a production-ready skill package that gives AI agents and assistants durable, auditable memory across sessions and instances. It keeps writes deterministic and append-only while preserving transparent filesystem-native recall.
 ```
 
 ## 7. Minimal Changelog Sections

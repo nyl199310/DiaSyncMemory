@@ -1,12 +1,12 @@
 # DiaSync Memory
 
-> Filesystem-native long-term memory for AI coding agents and coding assistants.
+> Filesystem-native long-term memory for AI agents and assistants.
 
 DiaSync Memory is an open-source memory runtime (plus OpenCode skill package) that helps
 agents keep context across sessions, coordinate concurrent instances, and preserve a fully
 auditable write history.
 
-If you are searching for terms like **AI agent memory**, **long-term memory for coding
+If you are searching for terms like **AI agent memory**, **long-term memory for autonomous
 agents**, **multi-agent memory synchronization**, or **append-only memory for LLM agents**,
 this repository is built for that problem space.
 
@@ -65,7 +65,7 @@ autonomous memory quality over time.
 
 DiaSync is a strong fit when you need:
 
-- coding-agent workflows that span many sessions,
+- agent workflows that span many sessions,
 - safe shared memory with multiple active instances,
 - transparent file-level memory you can inspect and version,
 - governance controls instead of silent state mutation.
@@ -138,7 +138,7 @@ Full reference: `docs/MEMORYCTL_CLI_SPEC.md`.
 
 ### What problem does DiaSync Memory solve?
 
-It provides durable, inspectable, cross-session memory for coding agents, including safe
+It provides durable, inspectable, cross-session memory for AI agents, including safe
 coordination when multiple instances work in parallel.
 
 ### Does it require a vector database?
@@ -201,9 +201,9 @@ Packaging guide: `.opencode/skills/PUBLISHING.md`.
 
 ## Related Search Terms
 
-AI agent memory, coding agent memory, long-term context for LLM agents, multi-agent memory,
+AI agent memory, long-term memory for autonomous agents, multi-agent memory,
 append-only memory ledger, filesystem-native memory, conflict-safe agent synchronization,
-OpenCode memory skill.
+OpenCode memory skill, memory for engineering, research, operations, and support agents.
 
 ## License
 

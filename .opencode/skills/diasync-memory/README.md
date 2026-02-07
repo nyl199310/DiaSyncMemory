@@ -3,10 +3,10 @@
 > OpenCode skill for filesystem-native AI agent memory, cross-session continuity, and
 > conflict-safe multi-instance synchronization.
 
-`diasync-memory` is a production-oriented skill package that gives coding agents durable,
-inspectable long-term memory using append-only ledgers in `.memory/`.
+`diasync-memory` is a production-oriented skill package that gives AI agents and assistants
+durable, inspectable long-term memory using append-only ledgers in `.memory/`.
 
-If you are looking for **agent memory**, **LLM long-term memory**, **coding assistant memory**,
+If you are looking for **agent memory**, **LLM long-term memory**, **assistant memory**,
 or **multi-agent memory coordination**, this package is designed for that use case.
 
 ## End-State (Begin With The End)
@@ -108,7 +108,7 @@ See `references/COMMANDS.md` for a concise command matrix.
 
 ## Use Cases
 
-- Long-running coding tasks that span many sessions.
+- Long-running tasks that span many sessions.
 - Multiple concurrent agent instances sharing one project memory.
 - Teams that require auditable, file-level memory traces.
 - Workflows where silent overwrite behavior is unacceptable.
@@ -142,5 +142,5 @@ Yes. See `../PUBLISHING.md` for packaging guidance.
 
 ## Related Search Terms
 
-AI agent memory, coding agent long-term memory, OpenCode memory skill, multi-agent memory
-synchronization, append-only memory ledger, filesystem-native memory for LLM agents.
+AI agent memory, long-term memory for autonomous agents, OpenCode memory skill, multi-agent
+memory synchronization, append-only memory ledger, filesystem-native memory for LLM agents.

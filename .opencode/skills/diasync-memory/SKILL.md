@@ -1,6 +1,6 @@
 ---
 name: diasync-memory
-description: Proactively and autonomously operate filesystem-native memory for AI coding agents across diachronic (over-time) and synchronic (concurrent) complexity using soft triggers, append-only integrity, conflict-safe coordination, and continuous diagnose/optimize governance.
+description: Proactively and autonomously operate filesystem-native memory for AI agents and assistants across diachronic (over-time) and synchronic (concurrent) complexity using soft triggers, append-only integrity, conflict-safe coordination, and continuous diagnose/optimize governance.
 compatibility: OpenCode skill. Requires Python 3.10+ and .opencode/skills/diasync-memory/scripts/memoryctl.py.
 metadata:
   architecture: diasync-memory-v1
