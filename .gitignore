@@ -50,3 +50,7 @@ NUL
 # Runtime memory substrate
 .memory/
 .memory*/
+
+# Evolution loop artifacts and controls
+artifacts/
+.evo/

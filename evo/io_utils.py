@@ -33,20 +33,30 @@ def run_command(
     cwd: Path,
     timeout_seconds: int | None = None,
 ) -> CommandResult:
-    completed = subprocess.run(
-        args,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-        check=False,
-    )
-    return CommandResult(
-        args=args,
-        exit_code=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
-    )
+    try:
+        completed = subprocess.run(
+            args,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+        return CommandResult(
+            args=args,
+            exit_code=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = _coerce_timeout_text(exc.stdout)
+        stderr = _coerce_timeout_text(exc.stderr)
+        return CommandResult(
+            args=args,
+            exit_code=124,
+            stdout=stdout,
+            stderr=stderr + "\nCommand timed out.",
+        )
 
 
 def run_shell_command(
@@ -54,21 +64,31 @@ def run_shell_command(
     cwd: Path,
     timeout_seconds: int | None = None,
 ) -> CommandResult:
-    completed = subprocess.run(
-        command,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-        shell=True,
-        check=False,
-    )
-    return CommandResult(
-        args=[command],
-        exit_code=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            shell=True,
+            check=False,
+        )
+        return CommandResult(
+            args=[command],
+            exit_code=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = _coerce_timeout_text(exc.stdout)
+        stderr = _coerce_timeout_text(exc.stderr)
+        return CommandResult(
+            args=[command],
+            exit_code=124,
+            stdout=stdout,
+            stderr=stderr + "\nShell command timed out.",
+        )
 
 
 def extract_json_payload(text: str) -> object | None:
@@ -96,6 +116,13 @@ def extract_json_payload(text: str) -> object | None:
             pass
 
     return None
+
+
+def fill_placeholders(template: str, values: dict[str, str]) -> str:
+    rendered = template
+    for key, value in values.items():
+        rendered = rendered.replace("{" + key + "}", value)
+    return rendered
 
 
 def _extract_fenced_json(text: str) -> str | None:
@@ -127,3 +154,11 @@ def _extract_braced_json(text: str) -> str | None:
             if depth == 0:
                 return text[start : index + 1]
     return None
+
+
+def _coerce_timeout_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value

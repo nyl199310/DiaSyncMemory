@@ -1,0 +1,24 @@
+{
+  "id": "smoke_train_minimal_cycle",
+  "title": "Smoke Train Minimal Memory Cycle",
+  "description": "Quick smoke scenario for runner, probe, and judge wiring.",
+  "complexity_mode": "mixed",
+  "difficulty": 1,
+  "tags": [
+    "smoke"
+  ],
+  "success_criteria": [
+    "The agent should run a minimal but valid memory lifecycle in an isolated root.",
+    "The resulting root should pass strict validation."
+  ],
+  "turns": [
+    "Run a minimal realistic lifecycle using {memory_root}, then stop cleanly with a checkpoint/handoff-level closure."
+  ],
+  "weights": {
+    "diachronic": 0.2,
+    "synchronic": 0.2,
+    "governance": 0.2,
+    "realism": 0.2,
+    "skill_alignment": 0.2
+  }
+}

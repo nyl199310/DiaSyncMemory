@@ -17,3 +17,7 @@ Scenario variables available in turn templates:
 - `{scope}`
 - `{scenario_id}`
 - `{scenario_title}`
+
+Turn directives:
+
+- Prefix a turn with `[[NEW_SESSION]]` to force a new OpenCode session boundary.

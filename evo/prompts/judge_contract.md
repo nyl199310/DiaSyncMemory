@@ -6,6 +6,8 @@ First-principles rubric:
 3. Skill alignment over hardcoded shortcuts.
 4. Real-world robustness over demo-only behavior.
 5. Filesystem-native memory operations only.
+6. Skill hydration must be explicit at session start.
+7. Multi-session directives must be honored when present.
 
 Read and apply this skill manifest before scoring:
 {skill_manifest}
@@ -35,3 +37,4 @@ Return strict JSON only, with this schema:
 }
 
 Do not output markdown. Output JSON only.
+Do not ask clarifying questions. Use best-effort scoring from the provided payload.

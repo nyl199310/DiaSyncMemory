@@ -1,0 +1,91 @@
+{
+  "project": "diasyncmemory",
+  "scope": "project:diasyncmemory",
+  "continuous": false,
+  "max_epochs": 0,
+  "max_wall_seconds": 0,
+  "max_stagnant_epochs": 1,
+  "stop_file": ".evo/STOP",
+  "artifact_root": "artifacts/evolution",
+  "memory_run_root": ".memory_evolution",
+  "train_scenarios_glob": "bench/scenarios/smoke/train_smoke.json",
+  "holdout_scenarios_glob": "bench/scenarios/smoke/holdout_smoke.json",
+  "skill_paths": [
+    ".opencode/skills/diasync-memory/SKILL.md",
+    ".opencode/skills/diasync-memory/references/PROACTIVE_CADENCE.md",
+    ".opencode/skills/diasync-memory/references/MEMORY_DEBT.md",
+    ".opencode/skills/diasync-memory/references/COMPLEXITY_RADAR.md"
+  ],
+  "quality_gate_commands": [
+    "python -m py_compile evolution.py evo/__init__.py evo/config.py evo/evaluator.py evo/io_utils.py evo/models.py evo/mutator.py evo/opencode_client.py evo/orchestrator.py evo/probe.py evo/runner.py evo/scenarios.py evo/synthesizer.py"
+  ],
+  "export_sessions": false,
+  "runner": {
+    "agent": "build",
+    "model": "",
+    "variant": "",
+    "thinking": false
+  },
+  "judge": {
+    "agent": "build",
+    "model": "",
+    "variant": "",
+    "thinking": false
+  },
+  "mutator": {
+    "agent": "build",
+    "model": "",
+    "variant": "",
+    "thinking": false
+  },
+  "synthesizer": {
+    "agent": "build",
+    "model": "",
+    "variant": "",
+    "thinking": false
+  },
+  "mutation": {
+    "enabled": false,
+    "max_operations": 1,
+    "allow_paths": [
+      "evo/"
+    ],
+    "deny_paths": [
+      ".memory/",
+      "venv/",
+      ".opencode/node_modules/"
+    ],
+    "require_improvement": 0.1,
+    "holdout_regression_tolerance": 0.0
+  },
+  "skill_hydration": {
+    "enforce": true,
+    "required_paths": [
+      ".opencode/skills/diasync-memory/SKILL.md"
+    ],
+    "minimum_reads": 1,
+    "hard_fail_missing": true
+  },
+  "synthesis": {
+    "enabled": false,
+    "per_epoch_train": 0,
+    "per_epoch_holdout": 0,
+    "min_turns": 1,
+    "max_turns": 2,
+    "max_difficulty": 2
+  },
+  "runtime_lane": {
+    "enabled": false,
+    "paths": [
+      ".opencode/skills/diasync-memory/scripts/memoryctl.py"
+    ],
+    "extra_gate_commands": [],
+    "force_full_evaluation": false,
+    "min_improvement": 0.1
+  },
+  "batch": {
+    "train_batch_size": 1,
+    "holdout_batch_size": 1,
+    "random_seed": 3
+  }
+}

@@ -16,7 +16,7 @@
   ],
   "turns": [
     "We are restarting a paused memory architecture effort. Continue from prior context without asking me to restate known facts. Use scope {scope}, project {project}, and root {memory_root}.",
-    "Major interruption happened. Continue from where we left off and report current goal, current stage, top risks, and next concrete action.",
+    "[[NEW_SESSION]] Major interruption happened and the prior terminal session is gone. Continue from where we left off and report current goal, current stage, top risks, and next concrete action.",
     "Before closing this work block, persist continuity so another instance can resume safely tomorrow."
   ],
   "weights": {

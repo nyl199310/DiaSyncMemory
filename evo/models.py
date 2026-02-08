@@ -51,6 +51,8 @@ class ScenarioExecution:
     turns: list[RunEvents]
     assistant_messages: list[str]
     command_trace: list[str]
+    read_paths: list[str]
+    session_ids: list[str]
     exported_session_path: Path | None
 
 

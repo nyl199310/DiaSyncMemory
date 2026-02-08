@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import MutationConfig
-from .io_utils import extract_json_payload, write_json
+from .io_utils import extract_json_payload, fill_placeholders, write_json
 from .models import MutationOperation, MutationProposal, MutationTransaction
 from .opencode_client import OpenCodeClient
 
@@ -45,11 +45,21 @@ class Mutator:
         run = self.client.run_message(
             prompt,
             title=f"mutator-epoch-{epoch}",
-            timeout_seconds=600,
+            timeout_seconds=60,
         )
 
         raw_text = "\n".join(run.texts)
         payload = extract_json_payload(raw_text)
+        if not isinstance(payload, dict):
+            repaired = self._repair_json_response(
+                session_id=run.session_id,
+                raw_text=raw_text,
+            )
+            repaired_payload = extract_json_payload(repaired)
+            if isinstance(repaired_payload, dict):
+                raw_text = raw_text + "\n" + repaired
+                payload = repaired_payload
+
         if not isinstance(payload, dict):
             write_json(
                 artifact_dir / "mutation-proposal-invalid.json",
@@ -149,11 +159,18 @@ class Mutator:
         recent_failures: list[dict[str, Any]],
     ) -> str:
         skill_manifest = "\n".join(f"- {path}" for path in self.skill_paths)
-        contract = self.mutator_contract.format(
-            skill_manifest=skill_manifest,
-            allow_paths="\n".join(f"- {item}" for item in self.mutation_config.allow_paths),
-            deny_paths="\n".join(f"- {item}" for item in self.mutation_config.deny_paths),
-            max_operations=self.mutation_config.max_operations,
+        contract = fill_placeholders(
+            self.mutator_contract,
+            {
+                "skill_manifest": skill_manifest,
+                "allow_paths": "\n".join(
+                    f"- {item}" for item in self.mutation_config.allow_paths
+                ),
+                "deny_paths": "\n".join(
+                    f"- {item}" for item in self.mutation_config.deny_paths
+                ),
+                "max_operations": str(self.mutation_config.max_operations),
+            },
         )
 
         payload = {
@@ -162,6 +179,24 @@ class Mutator:
             "recent_failures": recent_failures,
         }
         return f"{contract}\n\nMutation context:\n{json.dumps(payload, indent=2, ensure_ascii=True)}"
+
+    def _repair_json_response(self, *, session_id: str | None, raw_text: str) -> str:
+        if not session_id:
+            return ""
+
+        repair_prompt = (
+            "Your previous output was not strict JSON. "
+            "Return one JSON object only, matching the mutation schema. "
+            "Do not ask clarifying questions. No markdown.\n\n"
+            "Previous output:\n"
+            f"{raw_text}"
+        )
+        repair = self.client.run_message(
+            repair_prompt,
+            session_id=session_id,
+            timeout_seconds=45,
+        )
+        return "\n".join(repair.texts)
 
     def _resolve_and_validate(self, raw_path: str) -> Path:
         normalized = raw_path.replace("\\", "/")

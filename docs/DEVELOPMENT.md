@@ -126,10 +126,30 @@ To run the skill-driven autonomous memory evolution framework:
 python evolution.py --config evo/config.default.json --max-epochs 20
 ```
 
+With live progress events:
+
+```bash
+python evolution.py --config evo/config.default.json --max-epochs 20 --heartbeat-seconds 15
+```
+
+Progress is also written to `artifacts/evolution/<run_id>/progress.jsonl`.
+
+Continuous loop until stop signal:
+
+```bash
+python evolution.py --config evo/config.default.json --continuous --max-epochs 0
+```
+
 For evaluation-only mode (no mutation application):
 
 ```bash
 python evolution.py --config evo/config.default.json --dry-run --disable-mutation
+```
+
+Fast smoke wiring check:
+
+```bash
+python evolution.py --config evo/config.smoke.json --dry-run --disable-mutation --max-epochs 0
 ```
 
 Artifacts are written under `artifacts/evolution/<run_id>/`.

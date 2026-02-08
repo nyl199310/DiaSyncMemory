@@ -16,7 +16,7 @@
   ],
   "turns": [
     "We had a week of interruptions and changing priorities. Resume the memory program from durable context only, using root {memory_root}.",
-    "Now priorities changed again: preserve the original architecture guarantees while adjusting immediate next actions.",
+    "[[NEW_SESSION]] Now priorities changed again in a fresh terminal session: preserve the original architecture guarantees while adjusting immediate next actions.",
     "End with a handoff that a different instance can execute without re-asking basic context."
   ],
   "weights": {

@@ -1,0 +1,25 @@
+{
+  "id": "smoke_holdout_minimal_cycle",
+  "title": "Smoke Holdout Minimal Memory Cycle",
+  "description": "Quick holdout scenario for anti-overfitting pipeline validation.",
+  "complexity_mode": "diachronic",
+  "difficulty": 1,
+  "tags": [
+    "smoke",
+    "holdout"
+  ],
+  "success_criteria": [
+    "The scenario should execute in isolated root and maintain filesystem-native integrity.",
+    "No hard validation failures should appear."
+  ],
+  "turns": [
+    "Resume and close a short continuity cycle in {memory_root} with explicit next action clarity."
+  ],
+  "weights": {
+    "diachronic": 0.3,
+    "synchronic": 0.1,
+    "governance": 0.2,
+    "realism": 0.2,
+    "skill_alignment": 0.2
+  }
+}

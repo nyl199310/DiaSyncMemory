@@ -1,91 +1,121 @@
 # Autonomous Memory Evolution Framework
 
-This document defines a skill-first, filesystem-native framework for autonomous iteration of
-memory behavior quality.
+This document defines the end-state-oriented framework behind `python evolution.py`.
 
-Primary entrypoint:
-
-```bash
-python evolution.py --config evo/config.default.json --max-epochs 50
-```
+Core intent: keep memory behavior improving autonomously without human-in-the-loop for every
+iteration, while preserving correctness, auditability, and real-world robustness.
 
 ## 1. End State (Begin With The End)
 
-After enough epochs, the evolving agent should reliably:
+The evolving system should converge toward an agent memory mechanism that:
 
-- preserve continuity over long time horizons (diachronic complexity),
-- coordinate safely under concurrent pressure (synchronic complexity),
-- expose and resolve contention explicitly (never silent overwrite),
-- maintain governance health (`diagnose` + `optimize`) without micromanagement,
-- and keep all behavior auditable from filesystem artifacts.
+- preserves continuity across long time horizons (diachronic complexity),
+- remains conflict-safe under concurrent pressure (synchronic complexity),
+- closes governance loops (`diagnose` + `optimize`) proactively,
+- and stays filesystem-native, inspectable, and replayable at all times.
+
+Primary execution entrypoint:
+
+```bash
+python evolution.py --config evo/config.default.json --max-epochs 200
+```
+
+Continuous mode (stop manually via `.evo/STOP`):
+
+```bash
+python evolution.py --config evo/config.default.json --continuous --max-epochs 0
+```
 
 ## 2. First-Principles Constraints
 
-1. **External truth over self-claims**
-   - Scores and pass/fail decisions must be backed by artifacts and independent judging.
-2. **Skill-driven behavior over hardcoded hooks**
-   - Runtime behavior is guided by skill references, not brittle fixed scripts.
-3. **Filesystem-native memory only**
-   - No vector retrieval assumptions; all memory evidence remains file-auditable.
-4. **Real-world robustness over demo optimization**
-   - Scenario design stresses interruptions, drift, contention, and pressure conditions.
+1. **External evidence over self-claims**
+   - Every epoch is judged by artifacts (`session-export`, command trace, memory probe outputs).
+2. **Skill-driven autonomy over hardcoded orchestration**
+   - Runner behavior is guided by the skill manifest and references.
+3. **Filesystem-native only**
+   - No vector retrieval dependency; all state is verifiable from files and ledgers.
+4. **Reality stress over demo comfort**
+   - Scenarios include interruptions, contention, and release-pressure conditions.
+5. **Closed-loop mutation**
+   - Candidate changes are applied, gated, scored, and accepted/rejected automatically.
 
-## 3. Architecture
+## 3. Core Modules
 
-Framework modules:
-
-- `evolution.py`: CLI entrypoint.
-- `evo/orchestrator.py`: epoch loop and accept/reject logic.
-- `evo/runner.py`: executes scenario conversations via `opencode run`.
-- `evo/probe.py`: runs `memoryctl` integrity/governance probes.
-- `evo/evaluator.py`: independent AI judging + machine penalties.
-- `evo/mutator.py`: proposes and applies bounded text mutations.
-- `evo/scenarios.py`: scenario loading, curriculum batch selection, rendering.
-- `evo/opencode_client.py`: structured OpenCode session operations.
+- `evolution.py`: CLI entrypoint and runtime overrides.
+- `evo/orchestrator.py`: autonomous epoch loop, gates, decision, rollback.
+- `evo/runner.py`: multi-turn and multi-session scenario execution.
+- `evo/synthesizer.py`: AI-generated dynamic scenario synthesis per epoch.
+- `evo/evaluator.py`: AI judge + machine penalties + hard pass integration.
+- `evo/mutator.py`: bounded file mutations with allow/deny guardrails.
+- `evo/probe.py`: strict memory integrity and governance probe commands.
+- `evo/opencode_client.py`: OpenCode run/export integration.
 
 Prompt contracts:
 
 - `evo/prompts/runner_contract.md`
 - `evo/prompts/judge_contract.md`
 - `evo/prompts/mutator_contract.md`
+- `evo/prompts/scenario_synthesizer_contract.md`
 
-Scenarios:
+## 4. Role Separation
 
-- `bench/scenarios/train/*.json`
-- `bench/scenarios/holdout/*.json`
+- **Runner Agent**: executes behavior under scenario constraints.
+- **Judge Agent**: scores independently from execution context.
+- **Mutator Agent**: proposes minimal edits from failure evidence.
+- **Synthesizer Agent**: generates new realistic stress scenarios each epoch.
 
-## 4. Agent Roles (Separated)
+Role separation prevents single-session self-confirming loops.
 
-- **Runner Agent**: executes scenarios and produces behavior traces.
-- **Judge Agent**: independently scores behavior against skill principles.
-- **Mutator Agent**: proposes minimal, bounded edits from failure evidence.
+## 5. Autonomous Epoch Loop
 
-Role separation prevents single-session self-confirmation loops.
+Each epoch runs this closed loop:
 
-## 5. Epoch Loop
+1. Synthesize fresh train/holdout scenarios from recent train failures.
+2. Evaluate control baseline on sampled or full scenario batches.
+3. Generate mutation proposal from control failure profile.
+4. Apply mutation in bounded allow-list scope.
+5. Run quality gates (plus runtime-lane gates when runtime files are touched).
+6. Evaluate candidate on the same decision batch.
+7. Accept candidate only when hard gates pass and score-improvement policy is met.
+8. Otherwise rollback automatically.
 
-Each epoch:
+All artifacts are written under `artifacts/evolution/<run_id>/`.
 
-1. Select scenario batches (`train` + `holdout`) with curriculum pacing.
-2. Run each scenario in isolated memory roots under `.memory_evolution/<run>/<epoch>/...`.
-3. Export OpenCode sessions and command traces.
-4. Probe each scenario root with:
-   - `validate --strict`
-   - `diagnose --dry-run`
-   - `optimize --dry-run`
-   - `stats`
-5. Judge each run through an independent OpenCode scoring session.
-6. Aggregate fitness and hard-pass rates.
-7. Generate a bounded mutation proposal.
-8. Apply proposal, run quality gates, and evaluate candidate.
-9. Accept only if:
-   - hard gates stay clean,
-   - holdout does not regress,
-   - and score improves above threshold.
+## 6. Dynamic Scenario Synthesis
 
-## 6. Scoring Model (AI-Led, Artifact-Grounded)
+Scenario synthesis is epoch-native, not static-only:
 
-Scoring dimensions:
+- `synthesis.per_epoch_train` and `synthesis.per_epoch_holdout` control counts.
+- Generated scenarios are normalized and bounded (turn count, difficulty, complexity mode).
+- Synthesis context includes recent train failures and existing scenario corpus.
+
+This reduces overfitting to a fixed benchmark set.
+
+## 7. Skill Hydration Hard Gate
+
+Skill alignment is enforced behaviorally:
+
+- Runner prompts require skill reads at each new session boundary.
+- Machine checks verify required skill paths were actually read.
+- Missing required hydration reads can trigger hard failure.
+
+Configuration is in `skill_hydration` inside `evo/config.default.json`.
+
+## 8. Runtime Evolution Lane
+
+Runtime lane allows autonomous mutation of
+`.opencode/skills/diasync-memory/scripts/memoryctl.py` with stricter controls:
+
+- explicit runtime path allow-list,
+- extra gate commands,
+- optional full-batch re-evaluation,
+- stronger acceptance threshold (`runtime_lane.min_improvement`).
+
+This supports end-to-end autonomous improvement while preserving safety.
+
+## 9. Scoring and Decision
+
+Judge dimensions:
 
 - `diachronic`
 - `synchronic`
@@ -93,56 +123,46 @@ Scoring dimensions:
 - `realism`
 - `skill_alignment`
 
-Judge returns strict JSON. Framework then applies machine penalties for concrete issues
-(for example, missing scenario-specific `--root` usage or incomplete lifecycle closure).
+Machine penalties cover concrete contract violations (for example, missing scenario root usage,
+incomplete lifecycle closure, missing skill hydration). Hard integrity failures force fitness to
+zero and reject candidate adoption.
 
-Hard gate failures force scenario fitness to zero.
+## 10. Stop Conditions
 
-## 7. Mutation System
+Loop stops when any condition is met:
 
-Supported mutation ops:
-
-- `replace_text`
-- `insert_after`
-- `insert_before`
-- `append_text`
-- `write_file`
-
-Mutations are constrained by allow/deny path policy (`evo/config.default.json`).
-
-Default policy prioritizes:
-
-- prompt and scenario evolution,
-- skill/reference updates,
-- documentation alignment,
-
-while denying runtime/generated zones like `.memory/`, `venv/`, and `.opencode/node_modules/`.
-
-## 8. Realism and Saturation Strategy
-
-Scenario corpus intentionally includes:
-
-- interruption-heavy continuity flows,
-- concurrent contention and reconciliation,
-- mixed governance recovery under pressure,
-- holdout stress tests to catch overfitting.
-
-This design favors realistic failure discovery over artificial benchmark inflation.
-
-## 9. Safety and Stop Conditions
-
-The loop stops when any condition is met:
-
-- `--max-epochs` reached,
-- stagnation threshold reached,
 - stop file exists (`.evo/STOP`),
-- or manual interruption.
+- max epochs reached (if configured),
+- wall-time limit reached (if configured),
+- max stagnation threshold reached (if configured).
 
-Every epoch writes artifacts under `artifacts/evolution/<run_id>/` for replay and audit.
+## 11. Recommended Operation Modes
 
-## 10. Operating Notes
+Full autonomous iteration:
 
-- Use `--dry-run` to evaluate without applying mutations.
-- Use `--disable-mutation` to perform scoring-only runs.
-- Tune scenario difficulty and batch size in `evo/config.default.json`.
-- Keep skill references current; they are first-class evolution inputs.
+```bash
+python evolution.py --config evo/config.default.json --max-epochs 200
+```
+
+Live progress with periodic wait heartbeats:
+
+```bash
+python evolution.py --config evo/config.default.json --max-epochs 200 --heartbeat-seconds 15
+```
+
+Continuous daemon-like mode:
+
+```bash
+python evolution.py --config evo/config.default.json --continuous --max-epochs 0
+```
+
+Progress stream artifacts:
+
+- stderr live progress lines
+- `artifacts/evolution/<run_id>/progress.jsonl`
+
+Evaluation-only mode:
+
+```bash
+python evolution.py --config evo/config.default.json --dry-run --disable-mutation
+```

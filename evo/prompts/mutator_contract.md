@@ -4,6 +4,7 @@ Goal:
 - Propose minimal, high-leverage edits that improve memory behavior fidelity.
 - Prioritize skill policy, prompts, scenarios, and docs before runtime code.
 - Keep edits realistic and production-oriented.
+- If runtime lane paths are allowed, mutate runtime only with clear risk-reduction rationale.
 
 Use this skill manifest as your behavioral foundation:
 {skill_manifest}
@@ -38,3 +39,4 @@ Return strict JSON only:
 
 Do not include any operation outside the allow-list.
 Do not output markdown.
+Do not ask for clarification. Propose best-effort operations from provided failure evidence.

@@ -1,7 +1,9 @@
 {
   "project": "diasyncmemory",
   "scope": "project:diasyncmemory",
+  "continuous": false,
   "max_epochs": 20,
+  "max_wall_seconds": 0,
   "max_stagnant_epochs": 5,
   "stop_file": ".evo/STOP",
   "artifact_root": "artifacts/evolution",
@@ -17,9 +19,10 @@
   ],
   "quality_gate_commands": [
     "python -m py_compile .opencode/skills/diasync-memory/scripts/memoryctl.py",
-    "python -m py_compile evolution.py evo/*.py",
+    "python -m py_compile evolution.py evo/__init__.py evo/config.py evo/evaluator.py evo/io_utils.py evo/models.py evo/mutator.py evo/opencode_client.py evo/orchestrator.py evo/probe.py evo/runner.py evo/scenarios.py evo/synthesizer.py",
     "python .opencode/skills/diasync-memory/scripts/memoryctl.py validate --strict"
   ],
+  "export_sessions": true,
   "runner": {
     "agent": "build",
     "model": "",
@@ -33,6 +36,12 @@
     "thinking": false
   },
   "mutator": {
+    "agent": "build",
+    "model": "",
+    "variant": "",
+    "thinking": false
+  },
+  "synthesizer": {
     "agent": "build",
     "model": "",
     "variant": "",
@@ -55,6 +64,35 @@
     ],
     "require_improvement": 0.5,
     "holdout_regression_tolerance": 0.0
+  },
+  "skill_hydration": {
+    "enforce": true,
+    "required_paths": [
+      ".opencode/skills/diasync-memory/SKILL.md",
+      ".opencode/skills/diasync-memory/references/PROACTIVE_CADENCE.md"
+    ],
+    "minimum_reads": 2,
+    "hard_fail_missing": true
+  },
+  "synthesis": {
+    "enabled": true,
+    "per_epoch_train": 1,
+    "per_epoch_holdout": 1,
+    "min_turns": 2,
+    "max_turns": 4,
+    "max_difficulty": 5
+  },
+  "runtime_lane": {
+    "enabled": true,
+    "paths": [
+      ".opencode/skills/diasync-memory/scripts/memoryctl.py"
+    ],
+    "extra_gate_commands": [
+      "python .opencode/skills/diasync-memory/scripts/memoryctl.py capture --root .memory_runtime_gate --scope project:runtime-gate --project runtime-gate --instance-id ins-runtime-gate --summary \"runtime lane smoke gate\" --dry-run",
+      "python .opencode/skills/diasync-memory/scripts/memoryctl.py validate --root .memory_runtime_gate --strict"
+    ],
+    "force_full_evaluation": true,
+    "min_improvement": 1.0
   },
   "batch": {
     "train_batch_size": 2,
