@@ -1,0 +1,29 @@
+{
+  "id": "holdout_temporal_shock",
+  "title": "Holdout Temporal Shock and Context Recovery",
+  "description": "A hidden-style scenario that stresses real continuity quality after abrupt objective changes and delayed continuation.",
+  "complexity_mode": "diachronic",
+  "difficulty": 4,
+  "tags": [
+    "holdout",
+    "temporal",
+    "context-switch"
+  ],
+  "success_criteria": [
+    "The agent should recover prior intent without asking to restate known work.",
+    "Continuity artifacts should remain specific and actionable.",
+    "No demo-only shortcuts should replace real memory discipline."
+  ],
+  "turns": [
+    "We had a week of interruptions and changing priorities. Resume the memory program from durable context only, using root {memory_root}.",
+    "Now priorities changed again: preserve the original architecture guarantees while adjusting immediate next actions.",
+    "End with a handoff that a different instance can execute without re-asking basic context."
+  ],
+  "weights": {
+    "diachronic": 0.4,
+    "synchronic": 0.1,
+    "governance": 0.2,
+    "realism": 0.2,
+    "skill_alignment": 0.1
+  }
+}

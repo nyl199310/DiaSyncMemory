@@ -1,0 +1,30 @@
+{
+  "id": "synchronic_contention_resolution",
+  "title": "Concurrent Decision-Key Contention Resolution",
+  "description": "Two active instances must update a shared decision area with contention controls, explicit conflict visibility, and conflict-safe resolution.",
+  "complexity_mode": "synchronic",
+  "difficulty": 2,
+  "tags": [
+    "concurrency",
+    "lease",
+    "reconcile",
+    "conflicts"
+  ],
+  "success_criteria": [
+    "Parallel-instance behavior should not silently overwrite contested decisions.",
+    "Conflict handling should be explicit and auditable.",
+    "Final state should not leave stale leases or unresolved collisions."
+  ],
+  "turns": [
+    "Run a parallel work pattern where one instance updates risk controls and another proposes a conflicting decision. Keep everything in root {memory_root}.",
+    "Force contention on one shared decision key and resolve it with explicit ownership and correction flow.",
+    "Close the concurrent phase with clean coordination state and a concise explanation of what was resolved."
+  ],
+  "weights": {
+    "diachronic": 0.1,
+    "synchronic": 0.4,
+    "governance": 0.2,
+    "realism": 0.15,
+    "skill_alignment": 0.15
+  }
+}

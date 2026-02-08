@@ -1,0 +1,29 @@
+{
+  "id": "diachronic_resume_chain",
+  "title": "Long-Horizon Resume Chain Under Interruptions",
+  "description": "The agent must preserve continuity across interruptions, avoid context re-discovery, and keep next-action clarity over multiple turns.",
+  "complexity_mode": "diachronic",
+  "difficulty": 1,
+  "tags": [
+    "continuity",
+    "resume",
+    "handoff"
+  ],
+  "success_criteria": [
+    "Session start and resume behavior should be explicit and auditable.",
+    "Current goal, stage, risks, and next action should remain consistent across turns.",
+    "End of scenario should leave a clean continuity artifact trail."
+  ],
+  "turns": [
+    "We are restarting a paused memory architecture effort. Continue from prior context without asking me to restate known facts. Use scope {scope}, project {project}, and root {memory_root}.",
+    "Major interruption happened. Continue from where we left off and report current goal, current stage, top risks, and next concrete action.",
+    "Before closing this work block, persist continuity so another instance can resume safely tomorrow."
+  ],
+  "weights": {
+    "diachronic": 0.35,
+    "synchronic": 0.1,
+    "governance": 0.2,
+    "realism": 0.2,
+    "skill_alignment": 0.15
+  }
+}

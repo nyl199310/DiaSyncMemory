@@ -1,0 +1,30 @@
+{
+  "id": "mixed_governance_recovery",
+  "title": "Mixed-Mode Governance Recovery Under Drift Pressure",
+  "description": "The agent must handle mixed diachronic and synchronic pressure, then run governance loops to recover memory health without manual micromanagement.",
+  "complexity_mode": "mixed",
+  "difficulty": 3,
+  "tags": [
+    "mixed-mode",
+    "governance",
+    "diagnose",
+    "optimize"
+  ],
+  "success_criteria": [
+    "The workflow should expose drift and contention rather than hiding them.",
+    "The governance loop should be used proactively, not only reactively.",
+    "Resulting memory state should remain healthy and validated."
+  ],
+  "turns": [
+    "Assume this project has both long-horizon context drift and concurrent edits. Drive a realistic stabilization pass in {memory_root}.",
+    "Before finalizing, evaluate memory health and apply safe improvements if needed.",
+    "Finish with explicit checkpoint and handoff quality suitable for tomorrow's continuation."
+  ],
+  "weights": {
+    "diachronic": 0.25,
+    "synchronic": 0.25,
+    "governance": 0.25,
+    "realism": 0.15,
+    "skill_alignment": 0.1
+  }
+}

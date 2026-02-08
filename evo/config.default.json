@@ -1,0 +1,64 @@
+{
+  "project": "diasyncmemory",
+  "scope": "project:diasyncmemory",
+  "max_epochs": 20,
+  "max_stagnant_epochs": 5,
+  "stop_file": ".evo/STOP",
+  "artifact_root": "artifacts/evolution",
+  "memory_run_root": ".memory_evolution",
+  "train_scenarios_glob": "bench/scenarios/train/*.json",
+  "holdout_scenarios_glob": "bench/scenarios/holdout/*.json",
+  "skill_paths": [
+    ".opencode/skills/diasync-memory/SKILL.md",
+    ".opencode/skills/diasync-memory/references/PROACTIVE_CADENCE.md",
+    ".opencode/skills/diasync-memory/references/MEMORY_DEBT.md",
+    ".opencode/skills/diasync-memory/references/COMPLEXITY_RADAR.md",
+    ".opencode/skills/diasync-memory/references/GOVERNANCE_LOOP.md"
+  ],
+  "quality_gate_commands": [
+    "python -m py_compile .opencode/skills/diasync-memory/scripts/memoryctl.py",
+    "python -m py_compile evolution.py evo/*.py",
+    "python .opencode/skills/diasync-memory/scripts/memoryctl.py validate --strict"
+  ],
+  "runner": {
+    "agent": "build",
+    "model": "",
+    "variant": "",
+    "thinking": false
+  },
+  "judge": {
+    "agent": "build",
+    "model": "",
+    "variant": "",
+    "thinking": false
+  },
+  "mutator": {
+    "agent": "build",
+    "model": "",
+    "variant": "",
+    "thinking": false
+  },
+  "mutation": {
+    "enabled": true,
+    "max_operations": 3,
+    "allow_paths": [
+      "evo/",
+      "bench/scenarios/",
+      "docs/",
+      ".opencode/skills/diasync-memory/references/",
+      ".opencode/skills/diasync-memory/SKILL.md"
+    ],
+    "deny_paths": [
+      ".memory/",
+      "venv/",
+      ".opencode/node_modules/"
+    ],
+    "require_improvement": 0.5,
+    "holdout_regression_tolerance": 0.0
+  },
+  "batch": {
+    "train_batch_size": 2,
+    "holdout_batch_size": 1,
+    "random_seed": 11
+  }
+}
