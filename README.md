@@ -166,6 +166,7 @@ overwrites.
 - `docs/LEASE_PROTOCOL.md`: lease ownership and expiry model.
 - `docs/DIAGNOSE_RULES.md`: scoring and finding lifecycle.
 - `docs/DEVELOPMENT.md`: local workflow and quality gates.
+- `docs/EVOLUTION_FRAMEWORK.md`: autonomous skill-driven memory evolution loop.
 - `docs/SKILLS_CATALOG.md`: published skill and capability modules.
 - `docs/RELEASE_KIT.md`: publishing and release templates.
 

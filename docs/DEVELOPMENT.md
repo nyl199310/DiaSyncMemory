@@ -117,3 +117,19 @@ python .opencode/skills/diasync-memory/scripts/memoryctl.py optimize --dry-run
 ```
 
 Then verify `docs/` reflects the implemented behavior.
+
+## 10. Autonomous Evolution Loop
+
+To run the skill-driven autonomous memory evolution framework:
+
+```bash
+python evolution.py --config evo/config.default.json --max-epochs 20
+```
+
+For evaluation-only mode (no mutation application):
+
+```bash
+python evolution.py --config evo/config.default.json --dry-run --disable-mutation
+```
+
+Artifacts are written under `artifacts/evolution/<run_id>/`.
