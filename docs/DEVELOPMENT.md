@@ -152,4 +152,37 @@ Fast smoke wiring check:
 python evolution.py --config evo/config.smoke.json --dry-run --disable-mutation --max-epochs 0
 ```
 
+Default config sets `runner_fallback_only: false` to keep real autonomous pressure in
+the loop. Enable `runner_fallback_only: true` only when you need deterministic
+stabilization for debugging.
+
+Acceptance now includes objective gates tied to the end state (fallback dependency,
+diachronic/synchronic/skill-alignment trends), so candidates without real objective
+progress are rejected even when they pass basic hard gates.
+
+If runner providers are blocked (for example quota/auth failures), evo records explicit
+provider-block metrics and can stop with `provider-blocked` instead of spinning through
+non-actionable fallback-only epochs.
+
+Runner provider invocations now apply uniform retry (3 retries with backoff) before
+classifying a turn as provider-blocked.
+
+Default provider-block stop policy uses full-snapshot threshold (`1.0`) with one
+grace snapshot, so transient pool instability does not terminate the run immediately.
+
+When `continue_on_provider_blocked` is enabled, evo enters degraded mode and keeps
+mutation pressure active with a bounded provisional-acceptance policy. Candidate evidence
+is recorded in `candidate-bank.json` for later high-confidence confirmation.
+
+Final run summary includes provisional state telemetry (`provisional_accepts`,
+`provisional_pending`, `provisional_confirmations`) to show whether degraded-mode
+acceptances have been confirmed after provider recovery.
+
+Runner applies provider-fast-fallback per scenario: after hard provider blockage is
+detected, remaining turns switch to deterministic memoryctl fallback to avoid retry storms
+while preserving iterative learning pressure.
+
+If Judge JSON remains unreliable in your environment, the framework uses compact AI fallback
+and then deterministic fallback scoring to keep the loop operational.
+
 Artifacts are written under `artifacts/evolution/<run_id>/`.

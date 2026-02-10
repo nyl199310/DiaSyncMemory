@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -33,30 +34,12 @@ def run_command(
     cwd: Path,
     timeout_seconds: int | None = None,
 ) -> CommandResult:
-    try:
-        completed = subprocess.run(
-            args,
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            check=False,
-        )
-        return CommandResult(
-            args=args,
-            exit_code=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-        )
-    except subprocess.TimeoutExpired as exc:
-        stdout = _coerce_timeout_text(exc.stdout)
-        stderr = _coerce_timeout_text(exc.stderr)
-        return CommandResult(
-            args=args,
-            exit_code=124,
-            stdout=stdout,
-            stderr=stderr + "\nCommand timed out.",
-        )
+    return _run_subprocess(
+        command=args,
+        cwd=cwd,
+        timeout_seconds=timeout_seconds,
+        shell=False,
+    )
 
 
 def run_shell_command(
@@ -64,31 +47,12 @@ def run_shell_command(
     cwd: Path,
     timeout_seconds: int | None = None,
 ) -> CommandResult:
-    try:
-        completed = subprocess.run(
-            command,
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            shell=True,
-            check=False,
-        )
-        return CommandResult(
-            args=[command],
-            exit_code=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-        )
-    except subprocess.TimeoutExpired as exc:
-        stdout = _coerce_timeout_text(exc.stdout)
-        stderr = _coerce_timeout_text(exc.stderr)
-        return CommandResult(
-            args=[command],
-            exit_code=124,
-            stdout=stdout,
-            stderr=stderr + "\nShell command timed out.",
-        )
+    return _run_subprocess(
+        command=command,
+        cwd=cwd,
+        timeout_seconds=timeout_seconds,
+        shell=True,
+    )
 
 
 def extract_json_payload(text: str) -> object | None:
@@ -162,3 +126,67 @@ def _coerce_timeout_text(value: str | bytes | None) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return value
+
+
+def _run_subprocess(
+    *,
+    command: list[str] | str,
+    cwd: Path,
+    timeout_seconds: int | None,
+    shell: bool,
+) -> CommandResult:
+    process = subprocess.Popen(
+        command,
+        cwd=str(cwd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        shell=shell,
+    )
+
+    try:
+        stdout_text, stderr_text = process.communicate(timeout=timeout_seconds)
+        return CommandResult(
+            args=[command] if isinstance(command, str) else command,
+            exit_code=int(process.returncode or 0),
+            stdout=stdout_text,
+            stderr=stderr_text,
+        )
+    except subprocess.TimeoutExpired as exc:
+        partial_stdout = _coerce_timeout_text(exc.stdout)
+        partial_stderr = _coerce_timeout_text(exc.stderr)
+
+        _terminate_process_tree(process.pid)
+        try:
+            stdout_text, stderr_text = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout_text, stderr_text = process.communicate()
+
+        merged_stdout = (partial_stdout + stdout_text).strip("\n")
+        merged_stderr = (partial_stderr + stderr_text).strip("\n")
+        suffix = "Shell command timed out." if shell else "Command timed out."
+        merged_stderr = (merged_stderr + "\n" + suffix).strip("\n")
+
+        return CommandResult(
+            args=[command] if isinstance(command, str) else command,
+            exit_code=124,
+            stdout=merged_stdout,
+            stderr=merged_stderr,
+        )
+
+
+def _terminate_process_tree(pid: int) -> None:
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return
+
+    try:
+        os.kill(pid, 15)
+    except OSError:
+        return

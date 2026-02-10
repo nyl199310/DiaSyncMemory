@@ -63,6 +63,25 @@ class RuntimeLaneConfig:
 
 
 @dataclass
+class ObjectiveGateConfig:
+    min_dimension_improvement: float = 0.5
+    max_dimension_regression: float = 1.0
+    min_fallback_reduction: float = 0.05
+    max_fallback_increase: float = 0.0
+    require_objective_gain: bool = True
+    stop_when_provider_blocked: bool = True
+    provider_blocked_stop_rate: float = 1.0
+    provider_blocked_grace_snapshots: int = 1
+    continue_on_provider_blocked: bool = True
+    allow_provisional_acceptance: bool = True
+    max_provisional_accepts_per_run: int = 3
+    min_failure_alignment_score: float = 0.08
+    provisional_confirm_min_validation_confidence: float = 0.85
+    provisional_confirm_min_hard_pass_rate: float = 1.0
+    provisional_confirm_max_provider_blocked_rate: float = 0.0
+
+
+@dataclass
 class EvolutionConfig:
     project: str
     scope: str
@@ -78,6 +97,7 @@ class EvolutionConfig:
     skill_paths: list[str]
     quality_gate_commands: list[str]
     export_sessions: bool
+    runner_fallback_only: bool
     runner: AgentConfig = field(default_factory=AgentConfig)
     judge: AgentConfig = field(default_factory=AgentConfig)
     mutator: AgentConfig = field(default_factory=AgentConfig)
@@ -87,6 +107,7 @@ class EvolutionConfig:
     skill_hydration: SkillHydrationConfig = field(default_factory=SkillHydrationConfig)
     synthesis: ScenarioSynthesisConfig = field(default_factory=ScenarioSynthesisConfig)
     runtime_lane: RuntimeLaneConfig = field(default_factory=RuntimeLaneConfig)
+    objectives: ObjectiveGateConfig = field(default_factory=ObjectiveGateConfig)
 
     @classmethod
     def from_file(cls, file_path: Path) -> "EvolutionConfig":
@@ -101,6 +122,7 @@ class EvolutionConfig:
         skill_hydration = SkillHydrationConfig(**payload.get("skill_hydration", {}))
         synthesis = ScenarioSynthesisConfig(**payload.get("synthesis", {}))
         runtime_lane = RuntimeLaneConfig(**payload.get("runtime_lane", {}))
+        objectives = ObjectiveGateConfig(**payload.get("objectives", {}))
 
         return cls(
             project=payload["project"],
@@ -123,6 +145,7 @@ class EvolutionConfig:
             skill_paths=payload.get("skill_paths", []),
             quality_gate_commands=payload.get("quality_gate_commands", []),
             export_sessions=bool(payload.get("export_sessions", True)),
+            runner_fallback_only=bool(payload.get("runner_fallback_only", False)),
             runner=runner,
             judge=judge,
             mutator=mutator,
@@ -132,6 +155,7 @@ class EvolutionConfig:
             skill_hydration=skill_hydration,
             synthesis=synthesis,
             runtime_lane=runtime_lane,
+            objectives=objectives,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -150,6 +174,7 @@ class EvolutionConfig:
             "skill_paths": self.skill_paths,
             "quality_gate_commands": self.quality_gate_commands,
             "export_sessions": self.export_sessions,
+            "runner_fallback_only": self.runner_fallback_only,
             "runner": self.runner.__dict__,
             "judge": self.judge.__dict__,
             "mutator": self.mutator.__dict__,
@@ -159,4 +184,5 @@ class EvolutionConfig:
             "skill_hydration": self.skill_hydration.__dict__,
             "synthesis": self.synthesis.__dict__,
             "runtime_lane": self.runtime_lane.__dict__,
+            "objectives": self.objectives.__dict__,
         }

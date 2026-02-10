@@ -5,6 +5,7 @@ Goal:
 - Prioritize skill policy, prompts, scenarios, and docs before runtime code.
 - Keep edits realistic and production-oriented.
 - If runtime lane paths are allowed, mutate runtime only with clear risk-reduction rationale.
+- Prefer edits on active skill surfaces from the skill manifest; avoid creating docs that are not hydrated by the runner.
 
 Use this skill manifest as your behavioral foundation:
 {skill_manifest}

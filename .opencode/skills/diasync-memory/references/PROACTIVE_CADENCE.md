@@ -67,3 +67,17 @@ python .opencode/skills/diasync-memory/scripts/memoryctl.py sync stop --instance
 - Do not rewrite history in place.
 - Use `supersedes` for corrections.
 - Prefer proactive prevention over backlog cleanup.
+
+<!-- EVO-POLICY:START -->
+## Autonomous Resilience Policy
+- Keep autonomous memoryctl lifecycle as primary behavior; fallback is temporary safety only.
+- Preserve diachronic continuity across interruptions using checkpoint/handoff discipline.
+- Resolve synchronic contention with explicit lease ownership and reconcile flows.
+- Enforce command contract correctness (`--root` and `--scope`) before optimization.
+- Maintain governance loops (`validate`, `diagnose`, `optimize`) as continuous controls.
+- Active improvement themes:
+- Provider availability resilience and retry/backoff discipline.
+- Fallback dependency reduction through stronger autonomous contract-following.
+- Command-contract compliance for root/scope correctness on every turn.
+- Evaluation reliability and strict scoring JSON contract adherence.
+<!-- EVO-POLICY:END -->

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import statistics
 import sys
@@ -14,7 +15,15 @@ from typing import Any
 from .config import EvolutionConfig
 from .evaluator import SkillJudge, aggregate_scores, score_execution
 from .io_utils import ensure_dir, now_utc_stamp, run_shell_command, write_json
-from .models import Decision, EvaluationSnapshot, MutationProposal, Scenario, ScenarioResult
+from .models import (
+    Decision,
+    EvaluationSnapshot,
+    MutationProposal,
+    MutationTransaction,
+    SCORE_DIMENSIONS,
+    Scenario,
+    ScenarioResult,
+)
 from .mutator import Mutator
 from .opencode_client import OpenCodeClient
 from .probe import MemoryProbe
@@ -120,6 +129,7 @@ class EvolutionOrchestrator:
             skill_paths=config.skill_paths,
             export_sessions=config.export_sessions,
             progress_hook=lambda event, payload: self._progress(event, **payload),
+            fallback_only=config.runner_fallback_only,
         )
         self.judge = SkillJudge(
             client=judge_client,
@@ -136,6 +146,7 @@ class EvolutionOrchestrator:
         )
         self.synthesizer = ScenarioSynthesizer(
             client=synthesizer_client,
+            workspace_root=workspace_root,
             synthesis_config=config.synthesis,
             contract=synthesizer_contract,
             skill_paths=config.skill_paths,
@@ -222,11 +233,46 @@ class EvolutionOrchestrator:
         )
 
         history: list[dict[str, Any]] = []
+        candidate_bank: list[dict[str, Any]] = []
         stagnant_epochs = 0
+        provisional_accepts = 0
+        provisional_pending = False
+        provisional_confirmations = 0
         epoch = 1
         stop_reason = ""
+        provider_blocked_streak = 0
+        baseline_blocked = self._is_provider_blocked_snapshot(baseline_snapshot)
+        if baseline_blocked:
+            provider_blocked_streak = 1
+            rate = self._provider_blocked_rate(baseline_snapshot)
+            self._progress(
+                "provider_blocked_observed",
+                epoch=0,
+                label="baseline",
+                provider_blocked_rate=rate,
+                blocked_streak=provider_blocked_streak,
+                grace_snapshots=self.config.objectives.provider_blocked_grace_snapshots,
+            )
+            if provider_blocked_streak > self.config.objectives.provider_blocked_grace_snapshots:
+                if self.config.objectives.stop_when_provider_blocked and not self.config.objectives.continue_on_provider_blocked:
+                    stop_reason = "provider-blocked"
+                    self._progress(
+                        "provider_blocked_stop",
+                        epoch=0,
+                        label="baseline",
+                        provider_blocked_rate=rate,
+                        blocked_streak=provider_blocked_streak,
+                    )
+                else:
+                    self._progress(
+                        "provider_blocked_degraded",
+                        epoch=0,
+                        label="baseline",
+                        provider_blocked_rate=rate,
+                        blocked_streak=provider_blocked_streak,
+                    )
 
-        while True:
+        while not stop_reason:
             reason = self._stop_reason(epoch=epoch, stagnant_epochs=stagnant_epochs)
             if reason:
                 stop_reason = reason
@@ -271,6 +317,100 @@ class EvolutionOrchestrator:
                 hard_pass_rate=control_snapshot.hard_pass_rate,
             )
 
+            rate = 0.0
+            provider_degraded_mode = False
+            control_blocked = self._is_provider_blocked_snapshot(control_snapshot)
+            if control_blocked:
+                provider_blocked_streak += 1
+                rate = self._provider_blocked_rate(control_snapshot)
+                self._progress(
+                    "provider_blocked_observed",
+                    epoch=epoch,
+                    label="control",
+                    provider_blocked_rate=rate,
+                    blocked_streak=provider_blocked_streak,
+                    grace_snapshots=self.config.objectives.provider_blocked_grace_snapshots,
+                )
+            else:
+                provider_blocked_streak = 0
+
+            if control_blocked and (
+                provider_blocked_streak > self.config.objectives.provider_blocked_grace_snapshots
+            ):
+                if self.config.objectives.stop_when_provider_blocked and not self.config.objectives.continue_on_provider_blocked:
+                    active_snapshot = control_snapshot
+                    recent_train_failures = _collect_recent_failures(
+                        active_snapshot.scenario_results,
+                        partition="train",
+                    )
+                    history.append(
+                        {
+                            "epoch": epoch,
+                            "event": "provider-blocked-stop",
+                            "reason": "provider-blocked",
+                            "provider_blocked_rate": rate,
+                            "provider_blocked_streak": provider_blocked_streak,
+                            "train_score": control_snapshot.train_score,
+                            "holdout_score": control_snapshot.holdout_score,
+                        }
+                    )
+                    self._progress(
+                        "provider_blocked_stop",
+                        epoch=epoch,
+                        label="control",
+                        provider_blocked_rate=rate,
+                        blocked_streak=provider_blocked_streak,
+                    )
+                    stop_reason = "provider-blocked"
+                    break
+
+                provider_degraded_mode = True
+                self._progress(
+                    "provider_blocked_degraded",
+                    epoch=epoch,
+                    label="control",
+                    provider_blocked_rate=rate,
+                    blocked_streak=provider_blocked_streak,
+                )
+
+            if provisional_pending and not provider_degraded_mode:
+                confirmation = self._assess_provisional_confirmation(control_snapshot)
+                if confirmation["confirmed"]:
+                    provisional_pending = False
+                    provisional_confirmations += 1
+                    history.append(
+                        {
+                            "epoch": epoch,
+                            "event": "provisional-confirmed",
+                            "details": confirmation,
+                            "train_score": control_snapshot.train_score,
+                            "holdout_score": control_snapshot.holdout_score,
+                        }
+                    )
+                    self._progress(
+                        "provisional_confirmed",
+                        epoch=epoch,
+                        validation_confidence=confirmation["validation_confidence_mean"],
+                        hard_pass_rate=confirmation["hard_pass_rate"],
+                    )
+                else:
+                    history.append(
+                        {
+                            "epoch": epoch,
+                            "event": "provisional-pending",
+                            "details": confirmation,
+                            "train_score": control_snapshot.train_score,
+                            "holdout_score": control_snapshot.holdout_score,
+                        }
+                    )
+                    self._progress(
+                        "provisional_pending",
+                        epoch=epoch,
+                        reason=confirmation["reason"],
+                        validation_confidence=confirmation["validation_confidence_mean"],
+                        hard_pass_rate=confirmation["hard_pass_rate"],
+                    )
+
             if self.dry_run or self.disable_mutation:
                 active_snapshot = control_snapshot
                 recent_train_failures = _collect_recent_failures(
@@ -302,7 +442,11 @@ class EvolutionOrchestrator:
                 artifact_dir=epoch_dir,
             )
             if proposal is None:
-                stagnant_epochs += 1
+                stable_snapshot = _is_stable_snapshot(control_snapshot)
+                if stable_snapshot:
+                    stagnant_epochs = 0
+                else:
+                    stagnant_epochs += 1
                 active_snapshot = control_snapshot
                 recent_train_failures = _collect_recent_failures(
                     active_snapshot.scenario_results,
@@ -311,7 +455,7 @@ class EvolutionOrchestrator:
                 history.append(
                     {
                         "epoch": epoch,
-                        "event": "mutation-skipped",
+                        "event": "mutation-skipped" if not stable_snapshot else "steady-state-no-mutation",
                         "reason": "no valid mutation proposal",
                         "train_score": control_snapshot.train_score,
                         "holdout_score": control_snapshot.holdout_score,
@@ -370,6 +514,37 @@ class EvolutionOrchestrator:
                 epoch += 1
                 continue
 
+            candidate_delta = self._analyze_candidate_delta(
+                transaction,
+                proposal=proposal,
+                recent_failures=recent_train_failures,
+            )
+            write_json(epoch_dir / "candidate-delta.json", candidate_delta)
+            if not candidate_delta["has_required_evolution_diff"]:
+                self.mutator.rollback(transaction)
+                stagnant_epochs += 1
+                active_snapshot = control_for_decision
+                recent_train_failures = _collect_recent_failures(
+                    active_snapshot.scenario_results,
+                    partition="train",
+                )
+                history.append(
+                    {
+                        "epoch": epoch,
+                        "event": "rejected-no-evolution-diff",
+                        "reason": "candidate mutation did not create meaningful skill/runtime evolution diff",
+                        "delta": candidate_delta,
+                    }
+                )
+                self._progress(
+                    "candidate_delta_rejected",
+                    epoch=epoch,
+                    changed_files=candidate_delta["changed_file_count"],
+                    eligible_files=candidate_delta["eligible_file_count"],
+                )
+                epoch += 1
+                continue
+
             gate_results = self._run_quality_gates(runtime_touched=runtime_touched)
             write_json(epoch_dir / "quality-gates.json", gate_results)
             if gate_results["failed"]:
@@ -413,12 +588,34 @@ class EvolutionOrchestrator:
                 baseline=control_for_decision,
                 candidate=candidate_snapshot,
                 runtime_touched=runtime_touched,
+                candidate_delta=candidate_delta,
+                degraded_provider_mode=provider_degraded_mode,
+                provisional_accepts=provisional_accepts,
             )
+
+            candidate_bank_entry = {
+                "epoch": epoch,
+                "accepted": decision.accepted,
+                "provisional": decision.provisional,
+                "reason": decision.reason,
+                "runtime_touched": runtime_touched,
+                "provider_degraded_mode": provider_degraded_mode,
+                "candidate_delta": candidate_delta,
+                "objective_progress": decision.objective_progress,
+                "candidate_train_score": candidate_snapshot.train_score,
+                "candidate_holdout_score": candidate_snapshot.holdout_score,
+                "baseline_train_score": control_for_decision.train_score,
+                "baseline_holdout_score": control_for_decision.holdout_score,
+            }
+            candidate_bank.append(candidate_bank_entry)
+            write_json(epoch_dir / "candidate-bank-entry.json", candidate_bank_entry)
+
             write_json(
                 epoch_dir / "decision.json",
                 {
                     "decision": decision.__dict__,
                     "runtime_touched": runtime_touched,
+                    "candidate_delta": candidate_delta,
                     "candidate": _snapshot_to_dict(candidate_snapshot),
                     "baseline": _snapshot_to_dict(control_for_decision),
                     "proposal": proposal.parsed_payload,
@@ -432,22 +629,33 @@ class EvolutionOrchestrator:
                     partition="train",
                 )
                 stagnant_epochs = 0
+                if decision.provisional:
+                    provisional_accepts += 1
+                    provisional_pending = True
+                else:
+                    provisional_pending = False
+                accepted_event = "accepted-provisional" if decision.provisional else "accepted"
                 history.append(
                     {
                         "epoch": epoch,
-                        "event": "accepted",
+                        "event": accepted_event,
                         "reason": decision.reason,
                         "runtime_touched": runtime_touched,
+                        "provider_degraded_mode": provider_degraded_mode,
+                        "provisional": decision.provisional,
+                        "candidate_delta": candidate_delta,
+                        "objective_progress": decision.objective_progress,
                         "train_score": candidate_snapshot.train_score,
                         "holdout_score": candidate_snapshot.holdout_score,
                     }
                 )
                 self._progress(
-                    "epoch_accepted",
+                    "epoch_accepted_provisional" if decision.provisional else "epoch_accepted",
                     epoch=epoch,
                     train_score=candidate_snapshot.train_score,
                     holdout_score=candidate_snapshot.holdout_score,
                     runtime_touched=runtime_touched,
+                    provisional=decision.provisional,
                 )
             else:
                 self.mutator.rollback(transaction)
@@ -463,6 +671,10 @@ class EvolutionOrchestrator:
                         "event": "rejected",
                         "reason": decision.reason,
                         "runtime_touched": runtime_touched,
+                        "provider_degraded_mode": provider_degraded_mode,
+                        "provisional": decision.provisional,
+                        "candidate_delta": candidate_delta,
+                        "objective_progress": decision.objective_progress,
                         "candidate_train_score": candidate_snapshot.train_score,
                         "candidate_holdout_score": candidate_snapshot.holdout_score,
                     }
@@ -481,9 +693,20 @@ class EvolutionOrchestrator:
             "stop_reason": stop_reason,
             "best_snapshot": _snapshot_to_dict(active_snapshot),
             "history": history,
+            "candidate_bank_size": len(candidate_bank),
+            "provisional_accepts": provisional_accepts,
+            "provisional_pending": provisional_pending,
+            "provisional_confirmations": provisional_confirmations,
             "stagnant_epochs": stagnant_epochs,
             "completed_epochs": max(0, epoch - 1),
         }
+        write_json(
+            self.run_dir / "candidate-bank.json",
+            {
+                "run_id": self.run_id,
+                "entries": candidate_bank,
+            },
+        )
         write_json(self.run_dir / "final-summary.json", final_summary)
         self._progress(
             "run_finish",
@@ -533,6 +756,13 @@ class EvolutionOrchestrator:
 
         all_results = [*train_results, *holdout_results]
         _, hard_rate = aggregate_scores(all_results)
+        objective_metrics_all = _objective_metrics(all_results)
+        objective_metrics_train = _objective_metrics(train_results)
+        objective_metrics_holdout = _objective_metrics(holdout_results)
+        policy_metrics = _skill_policy_metrics(self.workspace_root, self.config.skill_paths)
+        objective_metrics_all.update(policy_metrics)
+        objective_metrics_train.update(policy_metrics)
+        objective_metrics_holdout.update(policy_metrics)
 
         summary = {
             "epoch": epoch,
@@ -558,6 +788,11 @@ class EvolutionOrchestrator:
             "partition_hard_pass_rate": {
                 "train": train_hard,
                 "holdout": holdout_hard,
+            },
+            "objective_metrics": objective_metrics_all,
+            "partition_objective_metrics": {
+                "train": objective_metrics_train,
+                "holdout": objective_metrics_holdout,
             },
         }
 
@@ -612,6 +847,8 @@ class EvolutionOrchestrator:
                 / scenario.id
             )
 
+            before_status = self._git_status_lines()
+
             execution = self.runner.execute(
                 scenario=scenario,
                 partition=partition,
@@ -621,6 +858,19 @@ class EvolutionOrchestrator:
                 project=self.config.project,
                 scope=self.config.scope,
             )
+
+            after_status = self._git_status_lines()
+            workspace_delta = sorted(after_status - before_status)
+            if workspace_delta:
+                self._revert_workspace_delta(workspace_delta)
+                self.runner.force_fallback_mode = True
+                write_json(
+                    scenario_artifact / "workspace-delta.json",
+                    {
+                        "detected": workspace_delta,
+                        "reverted": True,
+                    },
+                )
 
             probe_payload = self.probe.run(
                 memory_root=memory_root,
@@ -649,6 +899,17 @@ class EvolutionOrchestrator:
                 enforce_skill_hydration=self.config.skill_hydration.enforce,
                 hard_fail_missing_skills=self.config.skill_hydration.hard_fail_missing,
             )
+            if workspace_delta:
+                scenario_result.hard_pass = False
+                scenario_result.fitness = 0.0
+                scenario_result.violations.append(
+                    "Runner attempted workspace edits outside memory roots; changes were reverted."
+                )
+                preview = ", ".join(workspace_delta[:4])
+                if preview:
+                    scenario_result.violations.append(
+                        "Workspace delta preview: " + preview
+                    )
             write_json(
                 scenario_artifact / "scenario-result.json",
                 _scenario_result_to_dict(scenario_result),
@@ -777,13 +1038,151 @@ class EvolutionOrchestrator:
             "failed": failed,
         }
 
+    def _provider_blocked_rate(self, snapshot: EvaluationSnapshot) -> float:
+        objective_metrics = snapshot.summary.get("objective_metrics", {})
+        if not isinstance(objective_metrics, dict):
+            return 0.0
+        try:
+            return float(objective_metrics.get("provider_blocked_rate", 0.0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _objective_metric(
+        self,
+        snapshot: EvaluationSnapshot,
+        key: str,
+        default: float = 0.0,
+    ) -> float:
+        objective_metrics = snapshot.summary.get("objective_metrics", {})
+        if not isinstance(objective_metrics, dict):
+            return default
+        try:
+            return float(objective_metrics.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    def _is_provider_blocked_snapshot(self, snapshot: EvaluationSnapshot) -> bool:
+        if not self.config.objectives.stop_when_provider_blocked:
+            return False
+        rate = self._provider_blocked_rate(snapshot)
+        return rate >= self.config.objectives.provider_blocked_stop_rate
+
+    def _assess_provisional_confirmation(self, snapshot: EvaluationSnapshot) -> dict[str, Any]:
+        confidence = self._objective_metric(snapshot, "validation_confidence_mean", 0.0)
+        provider_rate = self._objective_metric(snapshot, "provider_blocked_rate", 0.0)
+        hard_pass_rate = float(snapshot.hard_pass_rate)
+
+        if provider_rate > self.config.objectives.provisional_confirm_max_provider_blocked_rate:
+            return {
+                "confirmed": False,
+                "reason": "provider still blocked in confirmation snapshot",
+                "validation_confidence_mean": confidence,
+                "provider_blocked_rate": provider_rate,
+                "hard_pass_rate": hard_pass_rate,
+            }
+
+        if confidence < self.config.objectives.provisional_confirm_min_validation_confidence:
+            return {
+                "confirmed": False,
+                "reason": "validation confidence below provisional confirmation threshold",
+                "validation_confidence_mean": confidence,
+                "provider_blocked_rate": provider_rate,
+                "hard_pass_rate": hard_pass_rate,
+            }
+
+        if hard_pass_rate < self.config.objectives.provisional_confirm_min_hard_pass_rate:
+            return {
+                "confirmed": False,
+                "reason": "hard pass rate below provisional confirmation threshold",
+                "validation_confidence_mean": confidence,
+                "provider_blocked_rate": provider_rate,
+                "hard_pass_rate": hard_pass_rate,
+            }
+
+        return {
+            "confirmed": True,
+            "reason": "provider recovered and objective confidence is sufficient",
+            "validation_confidence_mean": confidence,
+            "provider_blocked_rate": provider_rate,
+            "hard_pass_rate": hard_pass_rate,
+        }
+
     def _decide(
         self,
         *,
         baseline: EvaluationSnapshot,
         candidate: EvaluationSnapshot,
         runtime_touched: bool,
+        candidate_delta: dict[str, Any],
+        degraded_provider_mode: bool,
+        provisional_accepts: int,
     ) -> Decision:
+        objective_progress = _build_objective_progress(
+            baseline=baseline,
+            candidate=candidate,
+            min_dimension_improvement=self.config.objectives.min_dimension_improvement,
+            max_dimension_regression=self.config.objectives.max_dimension_regression,
+            min_fallback_reduction=self.config.objectives.min_fallback_reduction,
+            max_fallback_increase=self.config.objectives.max_fallback_increase,
+        )
+
+        if degraded_provider_mode and self.config.objectives.allow_provisional_acceptance:
+            return self._decide_degraded(
+                baseline=baseline,
+                candidate=candidate,
+                candidate_delta=candidate_delta,
+                objective_progress=objective_progress,
+                provisional_accepts=provisional_accepts,
+            )
+
+        if not candidate_delta.get("has_required_evolution_diff", False):
+            return Decision(
+                accepted=False,
+                reason="candidate has no meaningful skill/runtime diff",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+            )
+
+        if not objective_progress["fallback_gate_ok"]:
+            return Decision(
+                accepted=False,
+                reason="candidate increased fallback dependency",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+            )
+
+        if not objective_progress["provider_block_gate_ok"]:
+            return Decision(
+                accepted=False,
+                reason="candidate increased provider-blocked executions",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+            )
+
+        if not objective_progress["dimension_floor_ok"]:
+            return Decision(
+                accepted=False,
+                reason="candidate regressed core complexity dimensions",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+            )
+
         if candidate.hard_pass_rate < 1.0:
             return Decision(
                 accepted=False,
@@ -793,6 +1192,7 @@ class EvolutionOrchestrator:
                 baseline_train_score=baseline.train_score,
                 baseline_holdout_score=baseline.holdout_score,
                 candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
             )
 
         holdout_floor = (
@@ -807,6 +1207,21 @@ class EvolutionOrchestrator:
                 baseline_train_score=baseline.train_score,
                 baseline_holdout_score=baseline.holdout_score,
                 candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+            )
+
+        if self.config.objectives.require_objective_gain and not objective_progress[
+            "has_objective_gain"
+        ]:
+            return Decision(
+                accepted=False,
+                reason="candidate did not improve core objective metrics",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
             )
 
         required_delta = (
@@ -825,6 +1240,19 @@ class EvolutionOrchestrator:
                 baseline_train_score=baseline.train_score,
                 baseline_holdout_score=baseline.holdout_score,
                 candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+            )
+
+        if objective_progress["has_objective_gain"]:
+            return Decision(
+                accepted=True,
+                reason="candidate improved core objective metrics while preserving hard gates",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
             )
 
         return Decision(
@@ -835,7 +1263,216 @@ class EvolutionOrchestrator:
             baseline_train_score=baseline.train_score,
             baseline_holdout_score=baseline.holdout_score,
             candidate_hard_pass_rate=candidate.hard_pass_rate,
+            objective_progress=objective_progress,
         )
+
+    def _decide_degraded(
+        self,
+        *,
+        baseline: EvaluationSnapshot,
+        candidate: EvaluationSnapshot,
+        candidate_delta: dict[str, Any],
+        objective_progress: dict[str, Any],
+        provisional_accepts: int,
+    ) -> Decision:
+        if provisional_accepts >= self.config.objectives.max_provisional_accepts_per_run:
+            return Decision(
+                accepted=False,
+                reason="provisional acceptance budget exhausted for this run",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+                provisional=True,
+            )
+
+        if not candidate_delta.get("has_required_evolution_diff", False):
+            return Decision(
+                accepted=False,
+                reason="candidate has no meaningful skill/runtime diff",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+                provisional=True,
+            )
+
+        if candidate_delta.get("required_hydration_paths_touched", 0) <= 0:
+            return Decision(
+                accepted=False,
+                reason="candidate did not modify actively hydrated skill surfaces",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+                provisional=True,
+            )
+
+        alignment = float(candidate_delta.get("failure_alignment_score", 0.0))
+        if alignment < self.config.objectives.min_failure_alignment_score:
+            return Decision(
+                accepted=False,
+                reason="candidate did not align sufficiently with observed failure clusters",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+                provisional=True,
+            )
+
+        if not objective_progress["fallback_gate_ok"]:
+            return Decision(
+                accepted=False,
+                reason="candidate increased fallback dependency",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+                provisional=True,
+            )
+
+        if not objective_progress["provider_block_gate_ok"]:
+            return Decision(
+                accepted=False,
+                reason="candidate increased provider-blocked executions",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+                provisional=True,
+            )
+
+        if not objective_progress["dimension_floor_ok"]:
+            return Decision(
+                accepted=False,
+                reason="candidate regressed core complexity dimensions",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+                provisional=True,
+            )
+
+        if self.config.objectives.require_objective_gain and not (
+            objective_progress["has_objective_gain"]
+            or alignment >= self.config.objectives.min_failure_alignment_score
+        ):
+            return Decision(
+                accepted=False,
+                reason="candidate did not improve objective signals in degraded mode",
+                candidate_train_score=candidate.train_score,
+                candidate_holdout_score=candidate.holdout_score,
+                baseline_train_score=baseline.train_score,
+                baseline_holdout_score=baseline.holdout_score,
+                candidate_hard_pass_rate=candidate.hard_pass_rate,
+                objective_progress=objective_progress,
+                provisional=True,
+            )
+
+        return Decision(
+            accepted=True,
+            reason="provisional acceptance under provider-blocked degraded mode",
+            candidate_train_score=candidate.train_score,
+            candidate_holdout_score=candidate.holdout_score,
+            baseline_train_score=baseline.train_score,
+            baseline_holdout_score=baseline.holdout_score,
+            candidate_hard_pass_rate=candidate.hard_pass_rate,
+            objective_progress=objective_progress,
+            provisional=True,
+        )
+
+    def _analyze_candidate_delta(
+        self,
+        transaction: MutationTransaction,
+        *,
+        proposal: MutationProposal,
+        recent_failures: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        active_skill_paths = [_normalize_path(path) for path in self.config.skill_paths]
+        required_hydration_paths = [
+            _normalize_path(path)
+            for path in (
+                self.config.skill_hydration.required_paths
+                if self.config.skill_hydration.required_paths
+                else self.config.skill_paths[:1]
+            )
+        ]
+        runtime_paths = [_normalize_path(path) for path in self.config.runtime_lane.paths]
+        entries: list[dict[str, Any]] = []
+
+        for path in transaction.changed_paths:
+            backup = transaction.backups.get(path)
+            if backup is None:
+                continue
+            existed, before = backup
+            after = path.read_text(encoding="utf-8") if path.exists() else ""
+            rel_path = _to_rel_posix(path, self.workspace_root)
+            content_changed = before != after
+            meaningful = _meaningful_text(before) != _meaningful_text(after)
+
+            touches_active_skill = any(
+                _path_is_within(rel_path, skill_path)
+                for skill_path in active_skill_paths
+            )
+            touches_runtime = any(
+                rel_path == runtime_path or rel_path.startswith(runtime_path + "/")
+                for runtime_path in runtime_paths
+            )
+            eligible = meaningful and (touches_active_skill or touches_runtime)
+
+            entries.append(
+                {
+                    "path": rel_path,
+                    "existed": existed,
+                    "content_changed": content_changed,
+                    "meaningful_changed": meaningful,
+                    "touches_active_skill": touches_active_skill,
+                    "touches_runtime": touches_runtime,
+                    "eligible": eligible,
+                }
+            )
+
+        changed_entries = [item for item in entries if item["content_changed"]]
+        eligible_entries = [item for item in changed_entries if item["eligible"]]
+        required_touch = [
+            item
+            for item in eligible_entries
+            if any(
+                _path_is_within(item["path"], required_path)
+                for required_path in required_hydration_paths
+            )
+        ]
+        failure_alignment = _analyze_failure_alignment(
+            proposal=proposal,
+            recent_failures=recent_failures,
+            changed_entries=eligible_entries,
+        )
+        return {
+            "changed_file_count": len(changed_entries),
+            "eligible_file_count": len(eligible_entries),
+            "eligible_paths": [item["path"] for item in eligible_entries],
+            "required_hydration_paths_touched": len(required_touch),
+            "required_hydration_paths": [item["path"] for item in required_touch],
+            "failure_alignment_score": failure_alignment["score"],
+            "failure_alignment_hits": failure_alignment["hits"],
+            "failure_alignment_keywords": failure_alignment["keywords"],
+            "has_required_evolution_diff": bool(eligible_entries),
+            "entries": entries,
+        }
 
     def _progress(self, event: str, **payload: Any) -> None:
         timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
@@ -1007,6 +1644,12 @@ class EvolutionOrchestrator:
         return f"[evo {ts}] {event}{epoch_part}{detail_text}"
 
     def _stop_reason(self, *, epoch: int, stagnant_epochs: int) -> str:
+        if not self.config.continuous:
+            if self.config.max_epochs <= 0 and epoch > 0:
+                return "max-epochs-reached"
+            if self.config.max_epochs > 0 and epoch > self.config.max_epochs:
+                return "max-epochs-reached"
+
         if self._stop_file_exists():
             return "stop-file-triggered"
 
@@ -1022,11 +1665,6 @@ class EvolutionOrchestrator:
             if self.config.max_epochs > 0 and epoch > self.config.max_epochs:
                 return "max-epochs-reached"
             return ""
-
-        if self.config.max_epochs <= 0 and epoch > 0:
-            return "max-epochs-reached"
-        if self.config.max_epochs > 0 and epoch > self.config.max_epochs:
-            return "max-epochs-reached"
         return ""
 
     def _proposal_touches_runtime_lane(self, proposal: MutationProposal) -> bool:
@@ -1051,6 +1689,33 @@ class EvolutionOrchestrator:
 
     def _stop_file_exists(self) -> bool:
         return (self.workspace_root / self.config.stop_file).exists()
+
+    def _git_status_lines(self) -> set[str]:
+        result = run_shell_command("git status --porcelain", cwd=self.workspace_root)
+        if result.exit_code != 0:
+            return set()
+        return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+    def _revert_workspace_delta(self, delta_lines: list[str]) -> None:
+        for line in delta_lines:
+            if len(line) < 4:
+                continue
+            status = line[:2]
+            path_text = line[3:].strip()
+            path = self.workspace_root / path_text
+
+            if status == "??":
+                if path.is_file():
+                    path.unlink()
+                elif path.is_dir():
+                    shutil.rmtree(path, ignore_errors=True)
+                continue
+
+            run_shell_command(
+                f'git checkout -- "{path_text}"',
+                cwd=self.workspace_root,
+                timeout_seconds=60,
+            )
 
 
 def _snapshot_to_dict(snapshot: EvaluationSnapshot) -> dict[str, Any]:
@@ -1082,6 +1747,10 @@ def _scenario_result_to_dict(result: ScenarioResult) -> dict[str, Any]:
         "probe": result.probe,
         "command_trace": result.command_trace,
         "artifact_dir": result.artifact_dir,
+        "fallback_used": result.fallback_used,
+        "provider_blocked": result.provider_blocked,
+        "provider_block_reasons": result.provider_block_reasons,
+        "validation_confidence": result.validation_confidence,
     }
 
 
@@ -1123,8 +1792,362 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _is_stable_snapshot(snapshot: EvaluationSnapshot) -> bool:
+    if snapshot.hard_pass_rate < 1.0:
+        return False
+    return snapshot.train_score >= 90.0 and snapshot.holdout_score >= 90.0
+
+
 def _normalize_path(value: str) -> str:
     return value.replace("\\", "/")
+
+
+def _to_rel_posix(path: Path, workspace_root: Path) -> str:
+    try:
+        return path.resolve().relative_to(workspace_root.resolve()).as_posix()
+    except ValueError:
+        return _normalize_path(str(path))
+
+
+def _meaningful_text(value: str) -> str:
+    collapsed = " ".join(value.split())
+    return collapsed.strip()
+
+
+def _path_is_within(rel_path: str, target: str) -> bool:
+    normalized_rel = _normalize_path(rel_path).rstrip("/")
+    normalized_target = _normalize_path(target).rstrip("/")
+    if not normalized_target:
+        return False
+    if normalized_rel == normalized_target:
+        return True
+    return normalized_rel.startswith(normalized_target + "/")
+
+
+def _analyze_failure_alignment(
+    *,
+    proposal: MutationProposal,
+    recent_failures: list[dict[str, Any]],
+    changed_entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    keywords = _collect_failure_keywords(recent_failures)
+    if not keywords:
+        return {
+            "score": 0.0,
+            "hits": [],
+            "keywords": [],
+        }
+
+    corpus_parts: list[str] = [
+        proposal.rationale,
+        proposal.expected_effect,
+        proposal.raw_response,
+    ]
+    for operation in proposal.operations:
+        corpus_parts.extend(
+            [
+                operation.path,
+                operation.find or "",
+                operation.replace or "",
+                operation.anchor or "",
+                operation.text or "",
+                operation.content or "",
+            ]
+        )
+    for item in changed_entries:
+        corpus_parts.append(str(item.get("path", "")))
+
+    corpus = "\n".join(corpus_parts).lower()
+    hits = [keyword for keyword in keywords if keyword in corpus]
+    score = len(hits) / float(len(keywords))
+    return {
+        "score": round(score, 6),
+        "hits": hits,
+        "keywords": keywords,
+    }
+
+
+def _collect_failure_keywords(recent_failures: list[dict[str, Any]]) -> list[str]:
+    stop_words = {
+        "about",
+        "after",
+        "again",
+        "before",
+        "candidate",
+        "continue",
+        "contract",
+        "execution",
+        "fallback",
+        "focus",
+        "improve",
+        "memory",
+        "provider",
+        "restore",
+        "runner",
+        "scenario",
+        "score",
+        "should",
+        "strict",
+        "through",
+        "using",
+        "without",
+    }
+
+    counts: dict[str, int] = {}
+    for item in recent_failures:
+        text_chunks: list[str] = []
+        violations = item.get("violations", [])
+        next_focus = item.get("next_focus", [])
+        if isinstance(violations, list):
+            text_chunks.extend(str(chunk) for chunk in violations)
+        if isinstance(next_focus, list):
+            text_chunks.extend(str(chunk) for chunk in next_focus)
+
+        for chunk in text_chunks:
+            for token in re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{4,}", chunk.lower()):
+                if token in stop_words:
+                    continue
+                counts[token] = counts.get(token, 0) + 1
+
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [token for token, _ in ranked[:24]]
+
+
+def _skill_policy_metrics(workspace_root: Path, skill_paths: list[str]) -> dict[str, float]:
+    if not skill_paths:
+        return {
+            "skill_policy_score": 0.0,
+            "skill_path_coverage": 0.0,
+            "skill_policy_anchor_coverage": 0.0,
+        }
+
+    loaded_count = 0
+    corpus_chunks: list[str] = []
+    for rel_path in skill_paths:
+        candidate = workspace_root / rel_path
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        try:
+            text = candidate.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            text = candidate.read_text(encoding="utf-8", errors="replace")
+        corpus_chunks.append(text.lower())
+        loaded_count += 1
+
+    corpus = "\n".join(corpus_chunks)
+    policy_anchors: dict[str, tuple[str, ...]] = {
+        "memory_correctness": (
+            "memory correctness",
+            "append-only",
+            "validate --strict",
+            "integrity",
+        ),
+        "memory_relevance": (
+            "salience",
+            "confidence",
+            "distill",
+            "decision",
+        ),
+        "diachronic": (
+            "diachronic",
+            "resume",
+            "checkpoint",
+            "handoff",
+        ),
+        "synchronic": (
+            "synchronic",
+            "conflict",
+            "reconcile",
+            "lease",
+        ),
+        "self_evolution": (
+            "diagnose",
+            "optimize",
+            "governance",
+            "evolution",
+        ),
+    }
+
+    anchor_hits = 0
+    for terms in policy_anchors.values():
+        if any(term in corpus for term in terms):
+            anchor_hits += 1
+
+    path_coverage = loaded_count / float(len(skill_paths))
+    anchor_coverage = anchor_hits / float(len(policy_anchors))
+    score = 100.0 * (0.8 * anchor_coverage + 0.2 * path_coverage)
+
+    return {
+        "skill_policy_score": round(score, 3),
+        "skill_path_coverage": round(path_coverage, 6),
+        "skill_policy_anchor_coverage": round(anchor_coverage, 6),
+    }
+
+
+def _objective_metrics(results: list[ScenarioResult]) -> dict[str, float]:
+    if not results:
+        empty: dict[str, float] = {
+            "hard_pass_rate": 0.0,
+            "validate_clean_rate": 0.0,
+            "fallback_usage_rate": 0.0,
+            "effective_autonomy_rate": 0.0,
+            "provider_blocked_rate": 0.0,
+            "validation_confidence_mean": 0.0,
+            "memory_correctness_score": 0.0,
+            "core_complexity_mean": 0.0,
+        }
+        for dimension in SCORE_DIMENSIONS:
+            empty[f"{dimension}_mean"] = 0.0
+        return empty
+
+    total = float(len(results))
+    hard_count = sum(1 for item in results if item.hard_pass)
+    fallback_count = sum(1 for item in results if item.fallback_used)
+    provider_blocked_count = sum(1 for item in results if item.provider_blocked)
+    confidence_total = sum(float(item.validation_confidence) for item in results)
+
+    validate_clean_count = 0
+    for item in results:
+        validate = item.probe.get("validate_strict", {})
+        if not isinstance(validate, dict):
+            continue
+        if not validate.get("ok", False):
+            continue
+        try:
+            error_count = int(validate.get("error_count", 1))
+        except (TypeError, ValueError):
+            error_count = 1
+        if error_count == 0:
+            validate_clean_count += 1
+
+    metrics: dict[str, float] = {
+        "hard_pass_rate": hard_count / total,
+        "validate_clean_rate": validate_clean_count / total,
+        "fallback_usage_rate": fallback_count / total,
+        "provider_blocked_rate": provider_blocked_count / total,
+        "validation_confidence_mean": confidence_total / total,
+    }
+    metrics["effective_autonomy_rate"] = max(0.0, 1.0 - metrics["fallback_usage_rate"])
+
+    for dimension in SCORE_DIMENSIONS:
+        dim_total = sum(float(item.dimensions.get(dimension, 0.0)) for item in results)
+        metrics[f"{dimension}_mean"] = dim_total / total
+
+    metrics["core_complexity_mean"] = (
+        metrics["diachronic_mean"] + metrics["synchronic_mean"]
+    ) / 2.0
+    metrics["memory_correctness_score"] = 100.0 * (
+        0.6 * metrics["hard_pass_rate"] + 0.4 * metrics["validate_clean_rate"]
+    )
+    return metrics
+
+
+def _build_objective_progress(
+    *,
+    baseline: EvaluationSnapshot,
+    candidate: EvaluationSnapshot,
+    min_dimension_improvement: float,
+    max_dimension_regression: float,
+    min_fallback_reduction: float,
+    max_fallback_increase: float,
+) -> dict[str, Any]:
+    baseline_metrics = _objective_metrics(baseline.scenario_results)
+    candidate_metrics = _objective_metrics(candidate.scenario_results)
+    baseline_summary_metrics = baseline.summary.get("objective_metrics", {})
+    if isinstance(baseline_summary_metrics, dict):
+        for key, value in baseline_summary_metrics.items():
+            try:
+                baseline_metrics[str(key)] = float(value)
+            except (TypeError, ValueError):
+                continue
+
+    candidate_summary_metrics = candidate.summary.get("objective_metrics", {})
+    if isinstance(candidate_summary_metrics, dict):
+        for key, value in candidate_summary_metrics.items():
+            try:
+                candidate_metrics[str(key)] = float(value)
+            except (TypeError, ValueError):
+                continue
+
+    tracked_metrics = (
+        "diachronic_mean",
+        "synchronic_mean",
+        "skill_alignment_mean",
+        "skill_policy_score",
+        "memory_correctness_score",
+        "validation_confidence_mean",
+        "fallback_usage_rate",
+        "effective_autonomy_rate",
+        "provider_blocked_rate",
+    )
+    deltas = {
+        metric: candidate_metrics.get(metric, 0.0) - baseline_metrics.get(metric, 0.0)
+        for metric in tracked_metrics
+    }
+
+    core_dimension_metrics = (
+        "diachronic_mean",
+        "synchronic_mean",
+        "skill_alignment_mean",
+    )
+    dimension_floor_violations = [
+        metric
+        for metric in core_dimension_metrics
+        if deltas.get(metric, 0.0) < -max_dimension_regression
+    ]
+    dimension_gain_metrics = [
+        metric
+        for metric in core_dimension_metrics
+        if deltas.get(metric, 0.0) >= min_dimension_improvement
+    ]
+
+    fallback_delta = deltas.get("fallback_usage_rate", 0.0)
+    fallback_gate_ok = fallback_delta <= (max_fallback_increase + 1e-9)
+    fallback_gain = fallback_delta <= -(min_fallback_reduction - 1e-9)
+
+    provider_block_delta = deltas.get("provider_blocked_rate", 0.0)
+    provider_block_gate_ok = provider_block_delta <= 1e-9
+    provider_block_gain = provider_block_delta < -1e-9
+
+    correctness_gain = deltas.get("memory_correctness_score", 0.0) >= min_dimension_improvement
+    policy_gain = (
+        deltas.get("skill_policy_score", 0.0) >= min_dimension_improvement
+        and candidate_metrics.get("fallback_usage_rate", 0.0) < 1.0
+        and candidate_metrics.get("provider_blocked_rate", 0.0) <= 0.0
+    )
+    has_objective_gain = bool(
+        dimension_gain_metrics
+        or fallback_gain
+        or provider_block_gain
+        or correctness_gain
+        or policy_gain
+    )
+
+    return {
+        "baseline": baseline_metrics,
+        "candidate": candidate_metrics,
+        "delta": deltas,
+        "baseline_provider_blocked_rate": baseline_metrics.get("provider_blocked_rate", 0.0),
+        "candidate_provider_blocked_rate": candidate_metrics.get("provider_blocked_rate", 0.0),
+        "baseline_validation_confidence_mean": baseline_metrics.get(
+            "validation_confidence_mean",
+            0.0,
+        ),
+        "candidate_validation_confidence_mean": candidate_metrics.get(
+            "validation_confidence_mean",
+            0.0,
+        ),
+        "dimension_floor_ok": not dimension_floor_violations,
+        "dimension_floor_violations": dimension_floor_violations,
+        "dimension_gain_metrics": dimension_gain_metrics,
+        "fallback_gate_ok": fallback_gate_ok,
+        "fallback_gain": fallback_gain,
+        "provider_block_gate_ok": provider_block_gate_ok,
+        "provider_block_gain": provider_block_gain,
+        "correctness_gain": correctness_gain,
+        "policy_gain": policy_gain,
+        "has_objective_gain": has_objective_gain,
+    }
 
 
 def _parse_progress_token(token: str) -> tuple[int, int]:

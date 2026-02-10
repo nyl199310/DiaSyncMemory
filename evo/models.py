@@ -54,6 +54,10 @@ class ScenarioExecution:
     read_paths: list[str]
     session_ids: list[str]
     exported_session_path: Path | None
+    fallback_used: bool
+    fallback_only_mode: bool
+    provider_blocked: bool
+    provider_block_reasons: list[str]
 
 
 @dataclass
@@ -73,6 +77,10 @@ class ScenarioResult:
     probe: dict[str, Any]
     command_trace: list[str]
     artifact_dir: str
+    fallback_used: bool
+    provider_blocked: bool
+    provider_block_reasons: list[str]
+    validation_confidence: float
 
 
 @dataclass
@@ -122,3 +130,5 @@ class Decision:
     baseline_train_score: float
     baseline_holdout_score: float
     candidate_hard_pass_rate: float
+    objective_progress: dict[str, Any] = field(default_factory=dict)
+    provisional: bool = False

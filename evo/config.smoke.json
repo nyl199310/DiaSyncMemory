@@ -20,6 +20,7 @@
     "python -m py_compile evolution.py evo/__init__.py evo/config.py evo/evaluator.py evo/io_utils.py evo/models.py evo/mutator.py evo/opencode_client.py evo/orchestrator.py evo/probe.py evo/runner.py evo/scenarios.py evo/synthesizer.py"
   ],
   "export_sessions": false,
+  "runner_fallback_only": true,
   "runner": {
     "agent": "build",
     "model": "",
@@ -33,13 +34,13 @@
     "thinking": false
   },
   "mutator": {
-    "agent": "build",
+    "agent": "",
     "model": "",
     "variant": "",
     "thinking": false
   },
   "synthesizer": {
-    "agent": "build",
+    "agent": "",
     "model": "",
     "variant": "",
     "thinking": false
@@ -82,6 +83,23 @@
     "extra_gate_commands": [],
     "force_full_evaluation": false,
     "min_improvement": 0.1
+  },
+  "objectives": {
+    "min_dimension_improvement": 0.5,
+    "max_dimension_regression": 1.0,
+    "min_fallback_reduction": 0.05,
+    "max_fallback_increase": 0.0,
+    "require_objective_gain": true,
+    "stop_when_provider_blocked": true,
+    "provider_blocked_stop_rate": 1.0,
+    "provider_blocked_grace_snapshots": 1,
+    "continue_on_provider_blocked": true,
+    "allow_provisional_acceptance": true,
+    "max_provisional_accepts_per_run": 1,
+    "min_failure_alignment_score": 0.08,
+    "provisional_confirm_min_validation_confidence": 0.85,
+    "provisional_confirm_min_hard_pass_rate": 1.0,
+    "provisional_confirm_max_provider_blocked_rate": 0.0
   },
   "batch": {
     "train_batch_size": 1,

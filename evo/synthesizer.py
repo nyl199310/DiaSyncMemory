@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any
@@ -16,11 +15,13 @@ class ScenarioSynthesizer:
         self,
         *,
         client: OpenCodeClient,
+        workspace_root: Path,
         synthesis_config: ScenarioSynthesisConfig,
         contract: str,
         skill_paths: list[str],
     ) -> None:
         self.client = client
+        self.workspace_root = workspace_root
         self.synthesis_config = synthesis_config
         self.contract = contract
         self.skill_paths = skill_paths
@@ -41,12 +42,27 @@ class ScenarioSynthesizer:
             return []
 
         ensure_count = max(1, count)
+        context_payload = {
+            "epoch": epoch,
+            "partition": partition,
+            "project": project,
+            "scope": scope,
+            "base_scenarios": [_scenario_to_payload(item) for item in base_scenarios],
+            "recent_failures": recent_failures,
+            "constraints": {
+                "min_turns": self.synthesis_config.min_turns,
+                "max_turns": self.synthesis_config.max_turns,
+                "max_difficulty": self.synthesis_config.max_difficulty,
+            },
+        }
+        context_path = artifact_dir / f"synthesis-context-{partition}.json"
+        write_json(context_path, context_payload)
+
         prompt = self._build_prompt(
             epoch=epoch,
             partition=partition,
             count=ensure_count,
-            base_scenarios=base_scenarios,
-            recent_failures=recent_failures,
+            context_path=context_path,
             project=project,
             scope=scope,
         )
@@ -57,13 +73,13 @@ class ScenarioSynthesizer:
         )
 
         raw_text = "\n".join(run.texts)
-        payload = extract_json_payload(raw_text)
+        payload = _extract_synthesis_payload(raw_text)
         if payload is None:
             repaired = self._repair_json_response(
                 session_id=run.session_id,
                 raw_text=raw_text,
             )
-            repaired_payload = extract_json_payload(repaired)
+            repaired_payload = _extract_synthesis_payload(repaired)
             if repaired_payload is not None:
                 raw_text = raw_text + "\n" + repaired
                 payload = repaired_payload
@@ -95,6 +111,7 @@ class ScenarioSynthesizer:
                 "scenarios": [_scenario_to_payload(item) for item in normalized],
                 "session_id": run.session_id,
                 "exit_code": run.exit_code,
+                "context_path": _display_path(context_path, self.workspace_root),
             },
         )
         return normalized
@@ -105,8 +122,7 @@ class ScenarioSynthesizer:
         epoch: int,
         partition: str,
         count: int,
-        base_scenarios: list[Scenario],
-        recent_failures: list[dict[str, Any]],
+        context_path: Path,
         project: str,
         scope: str,
     ) -> str:
@@ -121,21 +137,14 @@ class ScenarioSynthesizer:
                 "scope": scope,
             },
         )
-
-        payload = {
-            "epoch": epoch,
-            "partition": partition,
-            "project": project,
-            "scope": scope,
-            "base_scenarios": [_scenario_to_payload(item) for item in base_scenarios],
-            "recent_failures": recent_failures,
-            "constraints": {
-                "min_turns": self.synthesis_config.min_turns,
-                "max_turns": self.synthesis_config.max_turns,
-                "max_difficulty": self.synthesis_config.max_difficulty,
-            },
-        }
-        return f"{contract}\n\nSynthesis context:\n{json.dumps(payload, ensure_ascii=True, indent=2)}"
+        context_ref = _display_path(context_path, self.workspace_root)
+        return (
+            f"{contract}\n\n"
+            f"Epoch: {epoch}\n"
+            "Read synthesis context JSON using the read tool from:\n"
+            f"- {context_ref}\n\n"
+            "Return strict JSON only."
+        )
 
     def _repair_json_response(self, *, session_id: str | None, raw_text: str) -> str:
         if not session_id:
@@ -239,6 +248,45 @@ def _extract_candidates(payload: object) -> list[dict[str, Any]]:
     return []
 
 
+def _extract_synthesis_payload(text: str) -> object | None:
+    candidates: list[object] = []
+
+    direct = extract_json_payload(text)
+    if direct is not None:
+        candidates.append(direct)
+
+    for block in _extract_fenced_blocks(text):
+        parsed = extract_json_payload(block)
+        if parsed is not None:
+            candidates.append(parsed)
+
+    for candidate in candidates:
+        if _extract_candidates(candidate):
+            return candidate
+
+    return candidates[0] if candidates else None
+
+
+def _extract_fenced_blocks(text: str) -> list[str]:
+    results: list[str] = []
+    marker = "```"
+    position = 0
+    while True:
+        start = text.find(marker, position)
+        if start == -1:
+            break
+        end = text.find(marker, start + len(marker))
+        if end == -1:
+            break
+        block = text[start + len(marker) : end].strip()
+        if block.startswith("json"):
+            block = block[4:].strip()
+        if block:
+            results.append(block)
+        position = end + len(marker)
+    return results
+
+
 def _scenario_to_payload(scenario: Scenario) -> dict[str, Any]:
     return {
         "id": scenario.id,
@@ -289,3 +337,10 @@ def _is_number(value: object) -> bool:
     except (TypeError, ValueError):
         return False
     return True
+
+
+def _display_path(path: Path, workspace_root: Path) -> str:
+    try:
+        return path.resolve().relative_to(workspace_root.resolve()).as_posix()
+    except ValueError:
+        return str(path)

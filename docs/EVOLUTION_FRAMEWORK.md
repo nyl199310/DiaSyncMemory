@@ -66,6 +66,19 @@ Prompt contracts:
 
 Role separation prevents single-session self-confirming loops.
 
+## 4.1 Runner Safety Mode
+
+Default config keeps autonomous runner behavior enabled (`runner_fallback_only: false`):
+
+- free-form agent execution remains the primary source of adaptation pressure,
+- deterministic fallback is still available as a safety net when execution degrades.
+
+If you need deterministic stabilization for debugging, set `runner_fallback_only` to `true`:
+
+- scenario execution is enforced through filesystem-native `memoryctl` commands,
+- workspace-edit side effects from autonomous tool usage are prevented,
+- multi-session directives are still honored via isolated fallback instance lifecycles.
+
 ## 5. Autonomous Epoch Loop
 
 Each epoch runs this closed loop:
@@ -76,8 +89,24 @@ Each epoch runs this closed loop:
 4. Apply mutation in bounded allow-list scope.
 5. Run quality gates (plus runtime-lane gates when runtime files are touched).
 6. Evaluate candidate on the same decision batch.
-7. Accept candidate only when hard gates pass and score-improvement policy is met.
+7. Accept candidate only when hard gates pass, score-improvement policy is met, and
+   candidate introduces a meaningful diff in allowed skill/runtime evolution surfaces.
 8. Otherwise rollback automatically.
+
+Meaningful diff is evaluated against active evolution surfaces (configured `skill_paths`
+plus runtime-lane paths), not arbitrary docs that the runner does not hydrate.
+
+When provider instability blocks autonomous validation, evo now enters a degraded
+provider mode instead of dropping mutation pressure immediately:
+
+- mutation proposals are still generated and evaluated,
+- candidate evidence is tracked in a run-local candidate bank,
+- and provisional acceptance is allowed only with bounded policy (hydrated-surface diff,
+  failure-alignment score, objective non-regression, and per-run acceptance cap).
+
+Provisional state is tracked explicitly (`provisional_pending`) and can be marked confirmed
+once provider blockage clears and confirmation thresholds are met (validation confidence,
+provider-blocked rate, and hard-pass rate).
 
 All artifacts are written under `artifacts/evolution/<run_id>/`.
 
@@ -126,6 +155,37 @@ Judge dimensions:
 Machine penalties cover concrete contract violations (for example, missing scenario root usage,
 incomplete lifecycle closure, missing skill hydration). Hard integrity failures force fitness to
 zero and reject candidate adoption.
+
+Runner fallback dependency is explicitly penalized in scoring (stronger penalty in
+fallback-only mode) so deterministic fallback cannot dominate optimization indefinitely.
+
+Decision policy also enforces objective gates tied to the end state:
+
+- fallback dependency must not increase beyond configured tolerance,
+- provider-blocked executions (for example quota/auth failures) must not increase,
+- core dimensions (`diachronic`, `synchronic`, `skill_alignment`) cannot regress beyond
+  configured limits,
+- and (by default) at least one core objective metric must improve before acceptance.
+
+When provider blockage dominates snapshots, evo can stop with `provider-blocked`
+to avoid wasting epochs on non-actionable fallback-only loops. Default policy uses
+`provider_blocked_stop_rate=1.0` with one grace snapshot before stopping.
+
+If `continue_on_provider_blocked` is enabled, evo keeps iterating in degraded mode and
+records provisional decisions rather than terminating at the first sustained blockage.
+
+Runner provider calls use uniform retry policy (3 retries with backoff) before
+provider-block classification, to absorb unstable third-party API pools.
+
+Runner also uses provider-fast-fallback: once hard provider blockage is detected for a
+scenario, remaining turns are executed via deterministic memoryctl fallback to preserve
+iteration cadence and reduce wasted retry churn.
+
+Judge reliability policy:
+
+- primary score comes from the Judge agent JSON payload,
+- if Judge output is invalid/unusable, the framework requests compact AI fallback scoring,
+- if Judge remains unreliable, a deterministic heuristic fallback keeps the loop operational.
 
 ## 10. Stop Conditions
 
